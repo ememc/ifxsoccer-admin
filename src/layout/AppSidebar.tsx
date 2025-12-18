@@ -50,8 +50,8 @@ const navItems: NavItem[] = [
     name: "Components",
     icon: <PageIcon />,
     subItems: [
-      { name: "Hero", path: "/hero", pro: false },
-      { name: "Programs", path: "/programs", pro: false },
+      { name: "Hero", path: "/hero-list", pro: false },
+      { name: "Programs", path: "/programs-list", pro: false },
     ],
   },
 ];
