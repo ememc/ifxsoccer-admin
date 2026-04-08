@@ -25,7 +25,7 @@ export default function App() {
               isAuthenticated() ? (
                 <AppLayout />
               ) : (
-                <Navigate to="/signin" replace />
+                <Navigate to="/" replace />
               )
             }
           >

@@ -3,7 +3,6 @@ import { useParams } from "react-router-dom";
 import ComponentCard from "../../../components/common/ComponentCard";
 import Label from "../../../components/form/Label";
 import Input from "../../../components/form/input/InputField";
-import Checkbox from "../../../components/form/input/Checkbox.tsx";
 import FileInput from "../../../components/form/input/FileInput.tsx";
 
 interface Hero {
