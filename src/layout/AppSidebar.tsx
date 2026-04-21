@@ -94,7 +94,7 @@ const AppSidebar: React.FC = () => {
   const [openSubmenu, setOpenSubmenu] = useState<{
     type: "main" | "others";
     index: number;
-  } | null>(null);
+  } | null>({ type: "main", index: 0 });
   const [subMenuHeight, setSubMenuHeight] = useState<Record<string, number>>(
     {}
   );
@@ -106,6 +106,16 @@ const AppSidebar: React.FC = () => {
     [location.pathname]
   );
 
+  const isSubItemActive = useCallback(
+    (path: string) => {
+      if (isActive(path)) return true;
+      if (path === "/hero-list" && location.pathname.startsWith("/hero/")) return true;
+      if (path === "/programs-list" && location.pathname.startsWith("/programs/")) return true;
+      return false;
+    },
+    [isActive, location.pathname]
+  );
+
   useEffect(() => {
     let submenuMatched = false;
     ["main", "others"].forEach((menuType) => {
@@ -113,7 +123,7 @@ const AppSidebar: React.FC = () => {
       items.forEach((nav, index) => {
         if (nav.subItems) {
           nav.subItems.forEach((subItem) => {
-            if (isActive(subItem.path)) {
+            if (isSubItemActive(subItem.path)) {
               setOpenSubmenu({
                 type: menuType as "main" | "others",
                 index,
@@ -126,9 +136,9 @@ const AppSidebar: React.FC = () => {
     });
 
     if (!submenuMatched) {
-      setOpenSubmenu(null);
+      setOpenSubmenu({ type: "main", index: 0 });
     }
-  }, [location, isActive]);
+  }, [location, isSubItemActive]);
 
   useEffect(() => {
     if (openSubmenu !== null) {
@@ -157,12 +167,16 @@ const AppSidebar: React.FC = () => {
 
   const renderMenuItems = (items: NavItem[], menuType: "main" | "others") => (
     <ul className="flex flex-col gap-4">
-      {items.map((nav, index) => (
+      {items.map((nav, index) => {
+        const hasActiveSubItem =
+          nav.subItems?.some((subItem) => isSubItemActive(subItem.path)) ?? false;
+
+        return (
         <li key={nav.name}>
           {nav.subItems ? (
             <button
               onClick={() => handleSubmenuToggle(index, menuType)}
-              className={`menu-item group ${openSubmenu?.type === menuType && openSubmenu?.index === index
+              className={`menu-item group ${(openSubmenu?.type === menuType && openSubmenu?.index === index) || hasActiveSubItem
                 ? "menu-item-active"
                 : "menu-item-inactive"
                 } cursor-pointer ${!isExpanded && !isHovered
@@ -171,7 +185,7 @@ const AppSidebar: React.FC = () => {
                 }`}
             >
               <span
-                className={`menu-item-icon-size  ${openSubmenu?.type === menuType && openSubmenu?.index === index
+                className={`menu-item-icon-size  ${(openSubmenu?.type === menuType && openSubmenu?.index === index) || hasActiveSubItem
                   ? "menu-item-icon-active"
                   : "menu-item-icon-inactive"
                   }`}
@@ -183,8 +197,8 @@ const AppSidebar: React.FC = () => {
               )}
               {(isExpanded || isHovered || isMobileOpen) && (
                 <ChevronDownIcon
-                  className={`ml-auto w-5 h-5 transition-transform duration-200 ${openSubmenu?.type === menuType &&
-                    openSubmenu?.index === index
+                  className={`ml-auto w-5 h-5 transition-transform duration-200 ${(openSubmenu?.type === menuType &&
+                    openSubmenu?.index === index) || hasActiveSubItem
                     ? "rotate-180 text-brand-500"
                     : ""
                     }`}
@@ -230,8 +244,8 @@ const AppSidebar: React.FC = () => {
                   <li key={subItem.name}>
                     <Link
                       to={subItem.path}
-                      className={`menu-dropdown-item ${isActive(subItem.path)
-                        ? "menu-dropdown-item-active"
+                      className={`menu-dropdown-item ${isSubItemActive(subItem.path)
+                        ? "menu-dropdown-item-active bg-success-50 text-success-700 border border-success-200 dark:bg-success-500/15 dark:text-success-300 dark:border-success-500/30"
                         : "menu-dropdown-item-inactive"
                         }`}
                     >
@@ -239,7 +253,7 @@ const AppSidebar: React.FC = () => {
                       <span className="flex items-center gap-1 ml-auto">
                         {subItem.new && (
                           <span
-                            className={`ml-auto ${isActive(subItem.path)
+                            className={`ml-auto ${isSubItemActive(subItem.path)
                               ? "menu-dropdown-badge-active"
                               : "menu-dropdown-badge-inactive"
                               } menu-dropdown-badge`}
@@ -249,7 +263,7 @@ const AppSidebar: React.FC = () => {
                         )}
                         {subItem.pro && (
                           <span
-                            className={`ml-auto ${isActive(subItem.path)
+                            className={`ml-auto ${isSubItemActive(subItem.path)
                               ? "menu-dropdown-badge-active"
                               : "menu-dropdown-badge-inactive"
                               } menu-dropdown-badge`}
@@ -265,7 +279,7 @@ const AppSidebar: React.FC = () => {
             </div>
           )}
         </li>
-      ))}
+      )})}
     </ul>
   );
 

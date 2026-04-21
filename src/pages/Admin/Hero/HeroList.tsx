@@ -12,6 +12,7 @@ import {
     TableHeader,
     TableRow,
 } from "../../../components/ui/table";
+import { resolveS3ImageUrl } from "../../../utils/s3Image";
 
 
 interface Hero {
@@ -42,8 +43,12 @@ export default function HeroList() {
                 if (!response.ok) {
                     throw new Error("Network response was not ok");
                 }
-                const result = await response.json();
-                setData(result);
+                const result: Hero[] = await response.json();
+                const normalized = result.map((item) => ({
+                    ...item,
+                    image: resolveS3ImageUrl(item.image),
+                }));
+                setData(normalized);
                 setLoading(false);
             } catch (err) {
                 setError("Failed to fetch data");
