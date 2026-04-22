@@ -52,6 +52,7 @@ const navItems: NavItem[] = [
     subItems: [
       { name: "Hero", path: "/hero-list", pro: false },
       { name: "Programs", path: "/programs-list", pro: false },
+      { name: "Category", path: "/categories-list", pro: false },
     ],
   },
 ];
@@ -111,6 +112,7 @@ const AppSidebar: React.FC = () => {
       if (isActive(path)) return true;
       if (path === "/hero-list" && location.pathname.startsWith("/hero/")) return true;
       if (path === "/programs-list" && location.pathname.startsWith("/programs/")) return true;
+      if (path === "/categories-list" && location.pathname.startsWith("/categories/")) return true;
       return false;
     },
     [isActive, location.pathname]
