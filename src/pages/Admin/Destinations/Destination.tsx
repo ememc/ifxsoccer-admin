@@ -11,13 +11,13 @@ import Button from "../../../components/ui/button/Button";
 import { Modal } from "../../../components/ui/modal";
 import { useModal } from "../../../hooks/useModal";
 import {
-  createEmptyHeroSlide,
-  createEmptyProgram,
-  createEmptySection,
-  loadPrograms,
-  upsertProgram,
-} from "./programData";
-import type { Program, ProgramHeroSlide, ProgramSection } from "./programData";
+  createEmptyDestinationHeroSlide,
+  createEmptyDestination,
+  createEmptyDestinationSection,
+  loadDestinations,
+  upsertDestination,
+} from "./destinationData";
+import type { Destination, DestinationHeroSlide, DestinationSection } from "./destinationData";
 
 const getPreviewClasses = (index: number) =>
   index % 2 === 0
@@ -25,12 +25,12 @@ const getPreviewClasses = (index: number) =>
     : "lg:grid-cols-[minmax(0,1fr)_minmax(0,220px)]";
 const DEFAULT_HERO_CAPTION = "YOU COULD BE NEXT!";
 
-export default function Program() {
+export default function Destination() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const { isOpen, openModal, closeModal } = useModal();
 
-  const [program, setProgram] = useState<Program | null>(null);
+  const [Destination, setProgram] = useState<Destination | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [heroImageDraft, setHeroImageDraft] = useState("");
   const [carouselIndex, setCarouselIndex] = useState(0);
@@ -49,20 +49,20 @@ export default function Program() {
 
   useEffect(() => {
     if (decodedId === "") {
-      setProgram(createEmptyProgram());
+      setProgram(createEmptyDestination());
       return;
     }
 
     if (decodedId === "new") {
-      setProgram(createEmptyProgram());
+      setProgram(createEmptyDestination());
       return;
     }
 
-    const found = loadPrograms().find((item) => item.id === decodedId);
-    setProgram(found ?? createEmptyProgram());
+    const found = loadDestinations().find((item) => item.id === decodedId);
+    setProgram(found ?? createEmptyDestination());
   }, [decodedId]);
 
-  const safeProgram = program ?? createEmptyProgram();
+  const safeProgram = Destination ?? createEmptyDestination();
   const validHeroSlides = useMemo(
     () => safeProgram.heroImages.filter((slide) => slide.image.trim().length > 0),
     [safeProgram.heroImages]
@@ -78,8 +78,8 @@ export default function Program() {
     : 0;
   const activeHeroSlide = validHeroSlides[carouselIndex] ?? primaryHeroSlide;
 
-  const normalizeProgramImages = (nextProgram: Program): Program => {
-    const normalizedSlides = nextProgram.heroImages.reduce<ProgramHeroSlide[]>(
+  const normalizeDestinationImages = (nextProgram: Destination): Destination => {
+    const normalizedSlides = nextProgram.heroImages.reduce<DestinationHeroSlide[]>(
       (acc, slide, index) => {
         const id = String(slide.id || `hero-${Date.now()}-${index}`);
         if (acc.some((item) => item.id === id)) {
@@ -109,8 +109,8 @@ export default function Program() {
     };
   };
 
-  const updateProgram = (patch: Partial<Program>) => {
-    setProgram(normalizeProgramImages({ ...safeProgram, ...patch }));
+  const updateProgram = (patch: Partial<Destination>) => {
+    setProgram(normalizeDestinationImages({ ...safeProgram, ...patch }));
     setSaveMessage(null);
   };
 
@@ -125,8 +125,8 @@ export default function Program() {
       return;
     }
 
-    const newSlide: ProgramHeroSlide = {
-      ...createEmptyHeroSlide(safeProgram.heroImages.length),
+    const newSlide: DestinationHeroSlide = {
+      ...createEmptyDestinationHeroSlide(safeProgram.heroImages.length),
       image: trimmed,
       caption: DEFAULT_HERO_CAPTION,
       applyNowUrl: safeProgram.applyOnlineUrl,
@@ -140,7 +140,7 @@ export default function Program() {
     setHeroImageDraft("");
   };
 
-  const updateHeroSlide = (slideId: string, patch: Partial<ProgramHeroSlide>) => {
+  const updateHeroSlide = (slideId: string, patch: Partial<DestinationHeroSlide>) => {
     updateProgram({
       heroImages: safeProgram.heroImages.map((slide) =>
         slide.id === slideId ? { ...slide, ...patch } : slide
@@ -167,7 +167,7 @@ export default function Program() {
 
   const updateSection = (
     sectionId: string,
-    patch: Partial<ProgramSection>
+    patch: Partial<DestinationSection>
   ) => {
     updateProgram({
       sections: safeProgram.sections.map((section) =>
@@ -180,7 +180,7 @@ export default function Program() {
     updateProgram({
       sections: [
         ...safeProgram.sections,
-        createEmptySection(safeProgram.sections.length),
+        createEmptyDestinationSection(safeProgram.sections.length),
       ],
     });
   };
@@ -192,11 +192,11 @@ export default function Program() {
   };
 
   const onSave = () => {
-    upsertProgram(normalizeProgramImages(safeProgram));
+    upsertDestination(normalizeDestinationImages(safeProgram));
     setSaveMessage("Programa guardado localmente.");
 
     if (decodedId === "new") {
-      navigate(`/programs/${btoa(safeProgram.id)}`, { replace: true });
+      navigate(`/destinations/${btoa(safeProgram.id)}`, { replace: true });
     }
   };
 
@@ -232,13 +232,13 @@ export default function Program() {
 
   return (
     <>
-      <PageMeta title="Program" description="Program editor" />
+      <PageMeta title="Destination" description="Destination editor" />
       <PageBreadcrumb
-        pageTitle={decodedId === "new" ? "New Program" : "Program Detail"}
+        pageTitle={decodedId === "new" ? "New Destination" : "Destination Detail"}
       />
       <div className="space-y-6">
         <ComponentCard
-          title={decodedId === "new" ? "New Program" : "Program"}
+          title={decodedId === "new" ? "New Destination" : "Destination"}
           desc="Front provisional con persistencia local mientras el API queda listo."
         >
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -251,22 +251,22 @@ export default function Program() {
             </div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={openModal}>
-                Preview Program
+                Preview Destination
               </Button>
               <Button
                 variant="outline"
-                onClick={() => navigate("/programs-list")}
+                onClick={() => navigate("/destinations-list")}
               >
                 Back to List
               </Button>
-              <Button onClick={onSave}>Save Program</Button>
+              <Button onClick={onSave}>Save Destination</Button>
             </div>
           </div>
 
           <div className="rounded-2xl border-2 border-[#3558a8] bg-[#f5f8ff] p-4 dark:border-[#4f6cb2] dark:bg-[#101a33]">
             <div className="mb-4 flex items-center justify-between gap-3">
               <h3 className="text-sm font-semibold uppercase tracking-wide text-[#234487] dark:text-[#9fb5e8]">
-                Main Program Content
+                Main Destination Content
               </h3>
               <span className="rounded-md bg-[#dce6fb] px-2 py-1 text-xs font-semibold text-[#234487] dark:bg-[#1a2b54] dark:text-[#b6c7ef]">
                 Principal
@@ -276,9 +276,9 @@ export default function Program() {
             <div className="space-y-6">
               <div className="grid gap-6 lg:grid-cols-2">
                 <div>
-                  <Label htmlFor="program-title">Titulo</Label>
+                  <Label htmlFor="Destination-title">Titulo</Label>
                   <Input
-                    id="program-title"
+                    id="Destination-title"
                     value={safeProgram.title}
                     onChange={(e) => updateProgram({ title: e.target.value })}
                     placeholder="Nombre del programa"
@@ -578,7 +578,7 @@ export default function Program() {
           <div className="mx-auto w-full max-w-[1100px] overflow-hidden rounded-[22px] bg-white text-[#1e1e1e]">
             <header className="bg-[#efefef]">
               <h1 className="px-4 py-3 text-center text-[20px] font-semibold text-[#153a84] sm:text-[34px]">
-                {safeProgram.title || "Program Title"}
+                {safeProgram.title || "Destination Title"}
               </h1>
             </header>
 
@@ -586,7 +586,7 @@ export default function Program() {
               {activeHeroSlide ? (
                 <img
                   src={activeHeroSlide.image}
-                  alt={safeProgram.title || "Program"}
+                  alt={safeProgram.title || "Destination"}
                   className="h-full w-full object-cover"
                 />
               ) : (
@@ -651,8 +651,8 @@ export default function Program() {
             <section className="space-y-8 bg-white px-6 py-10 sm:px-10">
               <h2 className="text-[26px] font-semibold leading-tight text-[#1e3f8f] sm:text-[39px]">
                 {safeProgram.title
-                  ? `${safeProgram.title} - Program Overview`
-                  : "Program Overview"}
+                  ? `${safeProgram.title} - Destination Overview`
+                  : "Destination Overview"}
               </h2>
 
               {(safeProgram.mainText || "El texto principal del programa aparecera aqui.")
@@ -754,5 +754,6 @@ export default function Program() {
     </>
   );
 }
+
 
 

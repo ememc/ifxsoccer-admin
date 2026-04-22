@@ -4,7 +4,6 @@ import Badge from "../../../components/ui/badge/Badge";
 import PageBreadcrumb from "../../../components/common/PageBreadCrumb";
 import ComponentCard from "../../../components/common/ComponentCard";
 import PageMeta from "../../../components/common/PageMeta";
-import Input from "../../../components/form/input/InputField";
 import Button from "../../../components/ui/button/Button";
 import {
   Table,
@@ -13,88 +12,51 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
-import {
-  Program,
-  createEmptyProgram,
-  loadPrograms,
-  removeProgram,
-  upsertProgram,
-} from "./programData";
+import { ImageItem, loadImages, moveImage, removeImage } from "./imageData";
 
-export default function ProgramsList() {
+export default function ImagesList() {
   const navigate = useNavigate();
-  const [data, setData] = useState<Program[]>([]);
-  const [newProgramTitle, setNewProgramTitle] = useState("");
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [data, setData] = useState<ImageItem[]>([]);
+
+  const refreshData = () => {
+    setData(loadImages());
+  };
 
   useEffect(() => {
-    setData(loadPrograms());
+    refreshData();
   }, []);
 
   const onEdit = (id: string) => {
-    navigate(`/programs/${btoa(id)}`);
+    navigate(`/images/${btoa(id)}`);
   };
 
   const onCreate = () => {
-    navigate("/programs/new");
+    navigate("/images/new");
   };
 
   const onDelete = (id: string) => {
-    const confirmed = window.confirm("Deseas borrar este programa?");
+    const confirmed = window.confirm("Deseas borrar esta imagen?");
     if (!confirmed) {
       return;
     }
 
-    removeProgram(id);
-    setData(loadPrograms());
+    removeImage(id);
+    refreshData();
   };
 
-  const onQuickSave = () => {
-    const title = newProgramTitle.trim();
-    if (!title) {
-      setSaveMessage("Escribe un Program Title antes de guardar.");
-      return;
-    }
-
-    const program = createEmptyProgram();
-    program.title = title;
-    upsertProgram(program);
-    setData(loadPrograms());
-    setNewProgramTitle("");
-    setSaveMessage("Program guardado.");
+  const onMove = (id: string, direction: "up" | "down") => {
+    moveImage(id, direction);
+    refreshData();
   };
 
   return (
     <>
-      <PageMeta title="Programs List" description="Programs List" />
-      <PageBreadcrumb pageTitle="Programs List" />
+      <PageMeta title="Images List" description="Images List" />
+      <PageBreadcrumb pageTitle="Images List" />
       <div className="space-y-6">
-        <ComponentCard title="Programs">
-          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-            <div className="min-w-[260px] flex-1">
-              <label
-                htmlFor="program-title-quick-save"
-                className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200"
-              >
-                Program Title
-              </label>
-              <Input
-                id="program-title-quick-save"
-                value={newProgramTitle}
-                onChange={(e) => {
-                  setNewProgramTitle(e.target.value);
-                  setSaveMessage(null);
-                }}
-                placeholder="Write the program title"
-              />
-            </div>
-            <Button onClick={onQuickSave}>Save Program</Button>
-          </div>
-          {saveMessage && (
-            <p className="mb-3 text-sm text-gray-600 dark:text-gray-300">{saveMessage}</p>
-          )}
+        <ComponentCard title="Images">
           <div className="mb-4 flex items-center justify-end">
-            <Button onClick={onCreate}>New Program</Button>
+            <Button onClick={onCreate}>New Image</Button>
           </div>
           <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
             <div className="max-w-full overflow-x-auto">
@@ -102,7 +64,7 @@ export default function ProgramsList() {
                 <TableHeader className="border-b border-gray-100 dark:border-white/[0.05]">
                   <TableRow>
                     <TableCell isHeader className="px-5 py-3 text-start">
-                      Image
+                      Preview
                     </TableCell>
                     <TableCell isHeader className="px-5 py-3 text-start">
                       Title
@@ -111,24 +73,30 @@ export default function ProgramsList() {
                       Status
                     </TableCell>
                     <TableCell isHeader className="px-5 py-3 text-start">
-                      Edit
+                      Order
+                    </TableCell>
+                    <TableCell isHeader className="px-5 py-3 text-start">
+                      Actions
                     </TableCell>
                   </TableRow>
                 </TableHeader>
                 <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
-                  {data.map((item) => (
+                  {data.map((item, index) => (
                     <TableRow key={item.id}>
                       <TableCell className="px-5 py-4">
-                        {item.mainImage ? (
-                          <div className="h-10 w-10 overflow-hidden rounded-md">
+                        {item.imageUrl ? (
+                          <div className="h-14 w-24 overflow-hidden rounded-md">
                             <img
-                              src={item.mainImage}
+                              src={item.imageUrl}
                               alt={item.title}
                               className="h-full w-full object-cover"
+                              onError={(event) => {
+                                event.currentTarget.src = "/images/logo/ifx-logo.png";
+                              }}
                             />
                           </div>
                         ) : (
-                          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-gray-100 text-xs text-gray-400 dark:bg-gray-800">
+                          <div className="flex h-14 w-24 items-center justify-center rounded-md bg-gray-100 text-xs text-gray-400 dark:bg-gray-800">
                             N/A
                           </div>
                         )}
@@ -141,6 +109,26 @@ export default function ProgramsList() {
                         >
                           {item.enabled === 1 ? "Enabled" : "Disabled"}
                         </Badge>
+                      </TableCell>
+                      <TableCell className="px-4 py-3">
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onMove(item.id, "up")}
+                            disabled={index === 0}
+                          >
+                            Up
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onMove(item.id, "down")}
+                            disabled={index === data.length - 1}
+                          >
+                            Down
+                          </Button>
+                        </div>
                       </TableCell>
                       <TableCell className="px-4 py-3">
                         <div className="flex gap-2">

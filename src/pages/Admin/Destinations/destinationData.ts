@@ -1,36 +1,36 @@
-export interface ProgramSection {
+export interface DestinationSection {
   id: string;
   title: string;
   text: string;
   image: string;
 }
 
-export interface ProgramHeroSlide {
+export interface DestinationHeroSlide {
   id: string;
   image: string;
   caption: string;
   applyNowUrl: string;
 }
 
-export interface Program {
+export interface Destination {
   id: string;
   title: string;
   mainImage: string;
-  heroImages: ProgramHeroSlide[];
+  heroImages: DestinationHeroSlide[];
   primaryHeroImageId: string;
   mainText: string;
   learnMoreUrl: string;
   applyOnlineUrl: string;
   enabled: 0 | 1;
-  sections: ProgramSection[];
+  sections: DestinationSection[];
 }
 
-const STORAGE_KEY = "ifx-admin-programs";
+const STORAGE_KEY = "ifx-admin-destinations";
 
-const seedPrograms: Program[] = [
+const seedDestinations: Destination[] = [
   {
     id: "high-performance",
-    title: "High Performance Program",
+    title: "High Performance Destination",
     mainImage:
       "https://images.unsplash.com/photo-1547347298-4074fc3086f0?auto=format&fit=crop&w=1200&q=80",
     heroImages: [
@@ -118,18 +118,18 @@ const seedPrograms: Program[] = [
   },
 ];
 
-const clonePrograms = (programs: Program[]): Program[] =>
-  programs.map((program) => ({
-    ...program,
-    heroImages: program.heroImages.map((slide) => ({ ...slide })),
-    sections: program.sections.map((section) => ({ ...section })),
+const cloneDestinations = (programs: Destination[]): Destination[] =>
+  programs.map((Destination) => ({
+    ...Destination,
+    heroImages: Destination.heroImages.map((slide) => ({ ...slide })),
+    sections: Destination.sections.map((section) => ({ ...section })),
   }));
 
 const normalizeHeroSlides = (
   heroImages: unknown,
   mainImage: string,
   applyOnlineUrl: string
-): ProgramHeroSlide[] => {
+): DestinationHeroSlide[] => {
   if (!Array.isArray(heroImages)) {
     if (!mainImage) {
       return [];
@@ -191,17 +191,17 @@ const normalizeHeroSlides = (
         applyNowUrl: String(raw.applyNowUrl ?? applyOnlineUrl),
       };
     })
-    .filter((slide): slide is ProgramHeroSlide => Boolean(slide));
+    .filter((slide): slide is DestinationHeroSlide => Boolean(slide));
 };
 
-export const loadPrograms = (): Program[] => {
+export const loadDestinations = (): Destination[] => {
   if (typeof window === "undefined") {
-    return clonePrograms(seedPrograms);
+    return cloneDestinations(seedDestinations);
   }
 
   const raw = window.localStorage.getItem(STORAGE_KEY);
   if (!raw) {
-    const initial = clonePrograms(seedPrograms);
+    const initial = cloneDestinations(seedDestinations);
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
     return initial;
   }
@@ -209,61 +209,61 @@ export const loadPrograms = (): Program[] => {
   try {
     const parsed = JSON.parse(raw) as Array<Record<string, unknown>>;
     if (!Array.isArray(parsed)) {
-      throw new Error("Invalid programs payload");
+      throw new Error("Invalid destinations payload");
     }
 
-    return parsed.map((program) => ({
-      id: String(program.id),
-      title: String(program.title ?? ""),
-      mainImage: String(program.mainImage ?? ""),
+    return parsed.map((Destination) => ({
+      id: String(Destination.id),
+      title: String(Destination.title ?? ""),
+      mainImage: String(Destination.mainImage ?? ""),
       heroImages: normalizeHeroSlides(
-        program.heroImages,
-        String(program.mainImage ?? ""),
-        String(program.applyOnlineUrl ?? "")
+        Destination.heroImages,
+        String(Destination.mainImage ?? ""),
+        String(Destination.applyOnlineUrl ?? "")
       ),
-      primaryHeroImageId: String(program.primaryHeroImageId ?? ""),
-      mainText: String(program.mainText ?? ""),
-      learnMoreUrl: String(program.learnMoreUrl ?? ""),
-      applyOnlineUrl: String(program.applyOnlineUrl ?? ""),
-      enabled: program.enabled === 1 ? (1 as const) : (0 as const),
-      sections: Array.isArray(program.sections)
-        ? program.sections.map((section) => ({
+      primaryHeroImageId: String(Destination.primaryHeroImageId ?? ""),
+      mainText: String(Destination.mainText ?? ""),
+      learnMoreUrl: String(Destination.learnMoreUrl ?? ""),
+      applyOnlineUrl: String(Destination.applyOnlineUrl ?? ""),
+      enabled: Destination.enabled === 1 ? (1 as const) : (0 as const),
+      sections: Array.isArray(Destination.sections)
+        ? Destination.sections.map((section) => ({
             id: String(section.id),
             title: String(section.title ?? ""),
             text: String(section.text ?? ""),
             image: String(section.image ?? ""),
           }))
         : [],
-    })).map((program) => {
+    })).map((Destination) => {
       const legacyPrimaryImage = String(
-        (program as unknown as Record<string, unknown>).primaryHeroImage ?? ""
+        (Destination as unknown as Record<string, unknown>).primaryHeroImage ?? ""
       );
-      const primaryByLegacyImage = program.heroImages.find(
+      const primaryByLegacyImage = Destination.heroImages.find(
         (slide) => slide.image === legacyPrimaryImage
       );
       const fallbackPrimaryId =
-        program.primaryHeroImageId ||
+        Destination.primaryHeroImageId ||
         primaryByLegacyImage?.id ||
-        program.heroImages[0]?.id ||
+        Destination.heroImages[0]?.id ||
         "";
       const primarySlide =
-        program.heroImages.find((slide) => slide.id === fallbackPrimaryId) ??
-        program.heroImages[0];
+        Destination.heroImages.find((slide) => slide.id === fallbackPrimaryId) ??
+        Destination.heroImages[0];
 
       return {
-        ...program,
+        ...Destination,
         primaryHeroImageId: primarySlide?.id ?? "",
         mainImage: primarySlide?.image ?? "",
       };
     });
   } catch {
-    const initial = clonePrograms(seedPrograms);
+    const initial = cloneDestinations(seedDestinations);
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
     return initial;
   }
 };
 
-export const savePrograms = (programs: Program[]) => {
+export const saveDestinations = (programs: Destination[]) => {
   if (typeof window === "undefined") {
     return;
   }
@@ -271,40 +271,40 @@ export const savePrograms = (programs: Program[]) => {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(programs));
 };
 
-export const upsertProgram = (program: Program) => {
-  const programs = loadPrograms();
-  const index = programs.findIndex((item) => item.id === program.id);
+export const upsertDestination = (Destination: Destination) => {
+  const programs = loadDestinations();
+  const index = programs.findIndex((item) => item.id === Destination.id);
 
   if (index >= 0) {
-    programs[index] = program;
+    programs[index] = Destination;
   } else {
-    programs.unshift(program);
+    programs.unshift(Destination);
   }
 
-  savePrograms(programs);
+  saveDestinations(programs);
 };
 
-export const removeProgram = (id: string) => {
-  const programs = loadPrograms().filter((program) => program.id !== id);
-  savePrograms(programs);
+export const removeDestination = (id: string) => {
+  const programs = loadDestinations().filter((Destination) => Destination.id !== id);
+  saveDestinations(programs);
 };
 
-export const createEmptySection = (index: number): ProgramSection => ({
+export const createEmptyDestinationSection = (index: number): DestinationSection => ({
   id: `section-${Date.now()}-${index}`,
   title: "",
   text: "",
   image: "",
 });
 
-export const createEmptyHeroSlide = (index: number): ProgramHeroSlide => ({
+export const createEmptyDestinationHeroSlide = (index: number): DestinationHeroSlide => ({
   id: `hero-${Date.now()}-${index}`,
   image: "",
   caption: "YOU COULD BE NEXT!",
   applyNowUrl: "",
 });
 
-export const createEmptyProgram = (): Program => ({
-  id: `program-${Date.now()}`,
+export const createEmptyDestination = (): Destination => ({
+  id: `destination-${Date.now()}`,
   title: "",
   mainImage: "",
   heroImages: [],
@@ -313,5 +313,6 @@ export const createEmptyProgram = (): Program => ({
   learnMoreUrl: "",
   applyOnlineUrl: "",
   enabled: 1,
-  sections: [createEmptySection(0)],
+  sections: [createEmptyDestinationSection(0)],
 });
+

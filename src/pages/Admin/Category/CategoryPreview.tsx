@@ -4,7 +4,7 @@ import PageBreadcrumb from "../../../components/common/PageBreadCrumb";
 import PageMeta from "../../../components/common/PageMeta";
 import Button from "../../../components/ui/button/Button";
 import { createEmptyCategory, loadCategories } from "./categoryData";
-import type { Category } from "./categoryData";
+import type { Category, CategorySection } from "./categoryData";
 
 const chunkSections = <T,>(items: T[], size: number) => {
   const chunks: T[][] = [];
@@ -15,6 +15,36 @@ const chunkSections = <T,>(items: T[], size: number) => {
 
   return chunks;
 };
+
+const SAMPLE_SECTIONS: CategorySection[] = [
+  {
+    id: "sample-1",
+    title: "Soccer Trials In Spain - AD Alcorcon",
+    text: "Elite summer experience focused on development, exposure and high-level sessions in Spain.",
+    image: "/images/brand/brand-01.svg",
+    learnMoreUrl: "#",
+    applyOnlineUrl: "#",
+    enabled: 1,
+  },
+  {
+    id: "sample-2",
+    title: "Paris Saint-Germain Academy Pro Europe",
+    text: "Professional training environment with expert coaches and advanced methodology.",
+    image: "/images/brand/brand-02.svg",
+    learnMoreUrl: "#",
+    applyOnlineUrl: "#",
+    enabled: 1,
+  },
+  {
+    id: "sample-3",
+    title: "2026 IFX Germany Soccer Camps In Bayern",
+    text: "Competitive development camps with immersive training and international exposure.",
+    image: "/images/brand/brand-03.svg",
+    learnMoreUrl: "#",
+    applyOnlineUrl: "#",
+    enabled: 1,
+  },
+];
 
 export default function CategoryPreview() {
   const navigate = useNavigate();
@@ -50,106 +80,95 @@ export default function CategoryPreview() {
   }, [decodedId, previewCategory]);
 
   const visibleSections = category.sections.filter((section) => section.enabled === 1);
-  const sectionGroups = chunkSections(visibleSections, 3);
+  const previewSections =
+    visibleSections.length >= 3
+      ? visibleSections
+      : [...visibleSections, ...SAMPLE_SECTIONS].slice(0, 3);
+  const sectionGroups = chunkSections(previewSections, 3);
 
   return (
     <>
       <PageMeta title="Category Preview" description="Category preview page" />
       <PageBreadcrumb pageTitle="Category Preview" />
-      <div className="space-y-8">
-        <div className="flex justify-end">
-          <Button variant="outline" onClick={() => navigate(-1)}>
+      <div className="space-y-6">
+        <div className="flex justify-end px-1">
+          <Button variant="outline" onClick={() => navigate(-1)} size="sm">
             Back
           </Button>
         </div>
 
-        <section className="rounded-[32px] bg-gray-950 px-6 py-10 text-white shadow-xl sm:px-10 sm:py-14">
-          <div className="mx-auto max-w-5xl text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-white/50">
-              Category Preview
-            </p>
-            <h1 className="mt-4 text-4xl font-semibold sm:text-6xl">
+        <section className="bg-white px-3 py-4 sm:px-6 sm:py-6">
+          <div className="mx-auto max-w-[1180px] space-y-7">
+            <h1 className="text-center text-[30px] font-semibold leading-tight text-[#1d4690] sm:text-[46px]">
               {category.title || "Category Title"}
             </h1>
-            <p className="mx-auto mt-6 max-w-3xl text-sm leading-7 text-white/70 sm:text-base">
-              {category.mainText || "El texto principal de la categoria aparecera aqui."}
-            </p>
-            <div className="mt-8 flex flex-wrap justify-center gap-3">
-              <a
-                href={category.learnMoreUrl || "#"}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-gray-950 transition hover:bg-gray-200"
-              >
-                Learn More
-              </a>
-              <a
-                href={category.applyOnlineUrl || "#"}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex rounded-full border border-white/20 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-              >
-                Apply Online
-              </a>
+
+            <div className="space-y-2 text-[14px] leading-6 text-[#28313f] sm:text-[16px]">
+              {(category.mainText || "El texto principal de la categoria aparecera aqui.")
+                .split(/\n+/)
+                .filter((line) => line.trim().length > 0)
+                .map((line, lineIndex) => (
+                  <p key={lineIndex}>{line}</p>
+                ))}
+            </div>
+
+            <div className="space-y-10">
+              {sectionGroups.map((group, groupIndex) => (
+                <section
+                  key={`group-${groupIndex}`}
+                  className="grid gap-x-5 gap-y-8 sm:grid-cols-2 xl:grid-cols-3"
+                >
+                  {group.map((section) => (
+                    <article key={section.id} className="flex flex-col">
+                      <div className="h-[180px] overflow-hidden bg-[#d2d2d2] sm:h-[220px]">
+                        {section.image ? (
+                          <img
+                            src={section.image}
+                            alt={section.title || "Category section"}
+                            className="h-full w-full object-cover"
+                            onError={(event) => {
+                              event.currentTarget.src = "/images/logo/ifx-logo.png";
+                            }}
+                          />
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-sm text-gray-500">
+                            Imagen de la seccion
+                          </div>
+                        )}
+                      </div>
+                      <div className="mt-2">
+                        <h2 className="text-[24px] font-medium uppercase leading-tight text-[#1d3570] sm:text-[28px]">
+                          {section.title || "Titulo de la seccion"}
+                        </h2>
+                        <p className="mt-2 line-clamp-3 min-h-[72px] text-[13px] leading-6 text-[#394457] sm:text-[14px]">
+                          {section.text || "El texto de la seccion aparecera aqui."}
+                        </p>
+                        <div className="mt-4 flex items-center gap-3">
+                          <a
+                            href={section.learnMoreUrl || "#"}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex min-h-[38px] min-w-[120px] items-center justify-center px-4 text-[13px] font-medium uppercase tracking-[0.02em] text-[#8a8253] transition hover:text-[#6e673f]"
+                          >
+                            Learn More
+                          </a>
+                          <a
+                            href={section.applyOnlineUrl || "#"}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex min-h-[38px] min-w-[140px] items-center justify-center rounded-[4px] bg-[#2e3a84] px-4 text-[13px] font-semibold uppercase tracking-[0.02em] text-white transition hover:bg-[#23306f]"
+                          >
+                            Apply Online
+                          </a>
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </section>
+              ))}
             </div>
           </div>
         </section>
-
-        <div className="space-y-8">
-          {sectionGroups.map((group, groupIndex) => (
-            <section
-              key={`group-${groupIndex}`}
-              className="grid gap-6 lg:grid-cols-3"
-            >
-              {group.map((section) => (
-                <article
-                  key={section.id}
-                  className="overflow-hidden rounded-[28px] border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-white/[0.03]"
-                >
-                  <div className="h-56 overflow-hidden bg-gray-100 dark:bg-gray-800">
-                    {section.image ? (
-                      <img
-                        src={section.image}
-                        alt={section.title || "Category section"}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-sm text-gray-400">
-                        Imagen de la seccion
-                      </div>
-                    )}
-                  </div>
-                  <div className="space-y-4 p-6">
-                    <h2 className="text-xl font-semibold text-gray-900 dark:text-white/90">
-                      {section.title || "Titulo de la seccion"}
-                    </h2>
-                    <p className="text-sm leading-7 text-gray-600 dark:text-gray-300">
-                      {section.text || "El texto de la seccion aparecera aqui."}
-                    </p>
-                    <div className="flex flex-wrap gap-3 pt-2">
-                      <a
-                        href={section.learnMoreUrl || "#"}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex rounded-full bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-700 dark:bg-white dark:text-gray-900"
-                      >
-                        Learn More
-                      </a>
-                      <a
-                        href={section.applyOnlineUrl || "#"}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex rounded-full border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-900 transition hover:bg-gray-100 dark:border-gray-700 dark:text-white dark:hover:bg-white/10"
-                      >
-                        Apply Online
-                      </a>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </section>
-          ))}
-        </div>
       </div>
     </>
   );

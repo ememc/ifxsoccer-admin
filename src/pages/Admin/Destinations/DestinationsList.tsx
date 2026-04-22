@@ -14,87 +14,87 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import {
-  Program,
-  createEmptyProgram,
-  loadPrograms,
-  removeProgram,
-  upsertProgram,
-} from "./programData";
+  Destination,
+  createEmptyDestination,
+  loadDestinations,
+  removeDestination,
+  upsertDestination,
+} from "./destinationData";
 
-export default function ProgramsList() {
+export default function DestinationsList() {
   const navigate = useNavigate();
-  const [data, setData] = useState<Program[]>([]);
-  const [newProgramTitle, setNewProgramTitle] = useState("");
+  const [data, setData] = useState<Destination[]>([]);
+  const [newDestinationTitle, setNewDestinationTitle] = useState("");
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    setData(loadPrograms());
+    setData(loadDestinations());
   }, []);
 
   const onEdit = (id: string) => {
-    navigate(`/programs/${btoa(id)}`);
+    navigate(`/destinations/${btoa(id)}`);
   };
 
   const onCreate = () => {
-    navigate("/programs/new");
+    navigate("/destinations/new");
   };
 
   const onDelete = (id: string) => {
-    const confirmed = window.confirm("Deseas borrar este programa?");
+    const confirmed = window.confirm("Deseas borrar este destino?");
     if (!confirmed) {
       return;
     }
 
-    removeProgram(id);
-    setData(loadPrograms());
+    removeDestination(id);
+    setData(loadDestinations());
   };
 
   const onQuickSave = () => {
-    const title = newProgramTitle.trim();
+    const title = newDestinationTitle.trim();
     if (!title) {
-      setSaveMessage("Escribe un Program Title antes de guardar.");
+      setSaveMessage("Escribe un Destination Title antes de guardar.");
       return;
     }
 
-    const program = createEmptyProgram();
-    program.title = title;
-    upsertProgram(program);
-    setData(loadPrograms());
-    setNewProgramTitle("");
-    setSaveMessage("Program guardado.");
+    const destination = createEmptyDestination();
+    destination.title = title;
+    upsertDestination(destination);
+    setData(loadDestinations());
+    setNewDestinationTitle("");
+    setSaveMessage("Destination guardado.");
   };
 
   return (
     <>
-      <PageMeta title="Programs List" description="Programs List" />
-      <PageBreadcrumb pageTitle="Programs List" />
+      <PageMeta title="Destinations List" description="Destinations List" />
+      <PageBreadcrumb pageTitle="Destinations List" />
       <div className="space-y-6">
-        <ComponentCard title="Programs">
+        <ComponentCard title="Destinations">
           <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
             <div className="min-w-[260px] flex-1">
               <label
-                htmlFor="program-title-quick-save"
+                htmlFor="destination-title-quick-save"
                 className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200"
               >
-                Program Title
+                Destination Title
               </label>
               <Input
-                id="program-title-quick-save"
-                value={newProgramTitle}
+                id="destination-title-quick-save"
+                value={newDestinationTitle}
                 onChange={(e) => {
-                  setNewProgramTitle(e.target.value);
+                  setNewDestinationTitle(e.target.value);
                   setSaveMessage(null);
                 }}
-                placeholder="Write the program title"
+                placeholder="Write the Destination title"
               />
             </div>
-            <Button onClick={onQuickSave}>Save Program</Button>
+            <Button onClick={onQuickSave}>Save Destination</Button>
           </div>
           {saveMessage && (
             <p className="mb-3 text-sm text-gray-600 dark:text-gray-300">{saveMessage}</p>
           )}
           <div className="mb-4 flex items-center justify-end">
-            <Button onClick={onCreate}>New Program</Button>
+            <Button onClick={onCreate}>New Destination</Button>
           </div>
           <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
             <div className="max-w-full overflow-x-auto">
@@ -167,3 +167,4 @@ export default function ProgramsList() {
     </>
   );
 }
+

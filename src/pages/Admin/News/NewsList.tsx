@@ -13,88 +13,82 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
-import {
-  Program,
-  createEmptyProgram,
-  loadPrograms,
-  removeProgram,
-  upsertProgram,
-} from "./programData";
+import { News, createEmptyNews, loadNews, removeNews, upsertNews } from "./newsData";
 
-export default function ProgramsList() {
+export default function NewsList() {
   const navigate = useNavigate();
-  const [data, setData] = useState<Program[]>([]);
-  const [newProgramTitle, setNewProgramTitle] = useState("");
+  const [data, setData] = useState<News[]>([]);
+  const [newNewsTitle, setNewNewsTitle] = useState("");
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    setData(loadPrograms());
+    setData(loadNews());
   }, []);
 
   const onEdit = (id: string) => {
-    navigate(`/programs/${btoa(id)}`);
+    navigate(`/news/${btoa(id)}`);
   };
 
   const onCreate = () => {
-    navigate("/programs/new");
+    navigate("/news/new");
   };
 
   const onDelete = (id: string) => {
-    const confirmed = window.confirm("Deseas borrar este programa?");
+    const confirmed = window.confirm("Deseas borrar esta noticia?");
     if (!confirmed) {
       return;
     }
 
-    removeProgram(id);
-    setData(loadPrograms());
+    removeNews(id);
+    setData(loadNews());
   };
 
   const onQuickSave = () => {
-    const title = newProgramTitle.trim();
+    const title = newNewsTitle.trim();
     if (!title) {
-      setSaveMessage("Escribe un Program Title antes de guardar.");
+      setSaveMessage("Escribe un News Title antes de guardar.");
       return;
     }
 
-    const program = createEmptyProgram();
-    program.title = title;
-    upsertProgram(program);
-    setData(loadPrograms());
-    setNewProgramTitle("");
-    setSaveMessage("Program guardado.");
+    const newsItem = createEmptyNews();
+    newsItem.title = title;
+    upsertNews(newsItem);
+    setData(loadNews());
+    setNewNewsTitle("");
+    setSaveMessage("Noticia guardada.");
   };
 
   return (
     <>
-      <PageMeta title="Programs List" description="Programs List" />
-      <PageBreadcrumb pageTitle="Programs List" />
+      <PageMeta title="News List" description="News List" />
+      <PageBreadcrumb pageTitle="News List" />
       <div className="space-y-6">
-        <ComponentCard title="Programs">
+        <ComponentCard title="News">
           <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
             <div className="min-w-[260px] flex-1">
               <label
-                htmlFor="program-title-quick-save"
+                htmlFor="news-title-quick-save"
                 className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200"
               >
-                Program Title
+                News Title
               </label>
               <Input
-                id="program-title-quick-save"
-                value={newProgramTitle}
+                id="news-title-quick-save"
+                value={newNewsTitle}
                 onChange={(e) => {
-                  setNewProgramTitle(e.target.value);
+                  setNewNewsTitle(e.target.value);
                   setSaveMessage(null);
                 }}
-                placeholder="Write the program title"
+                placeholder="Write the news title"
               />
             </div>
-            <Button onClick={onQuickSave}>Save Program</Button>
+            <Button onClick={onQuickSave}>Save News</Button>
           </div>
           {saveMessage && (
             <p className="mb-3 text-sm text-gray-600 dark:text-gray-300">{saveMessage}</p>
           )}
           <div className="mb-4 flex items-center justify-end">
-            <Button onClick={onCreate}>New Program</Button>
+            <Button onClick={onCreate}>New News</Button>
           </div>
           <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
             <div className="max-w-full overflow-x-auto">
@@ -111,7 +105,7 @@ export default function ProgramsList() {
                       Status
                     </TableCell>
                     <TableCell isHeader className="px-5 py-3 text-start">
-                      Edit
+                      Actions
                     </TableCell>
                   </TableRow>
                 </TableHeader>
@@ -119,10 +113,10 @@ export default function ProgramsList() {
                   {data.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell className="px-5 py-4">
-                        {item.mainImage ? (
+                        {item.image ? (
                           <div className="h-10 w-10 overflow-hidden rounded-md">
                             <img
-                              src={item.mainImage}
+                              src={item.image}
                               alt={item.title}
                               className="h-full w-full object-cover"
                             />
