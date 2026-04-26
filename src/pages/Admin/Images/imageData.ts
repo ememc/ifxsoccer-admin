@@ -4,110 +4,121 @@ export interface ImageItem {
   imageUrl: string;
   publishedAt: string;
   enabled: 0 | 1;
+  order: number;
 }
 
-const STORAGE_KEY = "ifx-admin-images";
+export const IMAGES_API_URL =
+  "https://wnst4od7yyiclacd6dvrz7uwom0mnlfq.lambda-url.us-west-1.on.aws/";
 
-const seedImages: ImageItem[] = [
-  {
-    id: "image-camp-1",
-    title: "IFX Camp Training Session",
-    imageUrl:
-      "https://images.unsplash.com/photo-1518604666860-9ed391f76460?auto=format&fit=crop&w=1200&q=80",
-    publishedAt: "2026-04-20",
-    enabled: 1,
-  },
-  {
-    id: "image-camp-2",
-    title: "International Tryout Match",
-    imageUrl:
-      "https://images.unsplash.com/photo-1547347298-4074fc3086f0?auto=format&fit=crop&w=1200&q=80",
-    publishedAt: "2026-04-18",
-    enabled: 1,
-  },
-];
+interface ImageApiItem {
+  image_title?: unknown;
+  image__url?: unknown;
+  image_url?: unknown;
+  image_enabled?: unknown;
+  iamge_id?: unknown;
+  image_id?: unknown;
+  image_date?: unknown;
+  image_order?: unknown;
+}
 
-const cloneImages = (images: ImageItem[]): ImageItem[] => images.map((image) => ({ ...image }));
+interface ImagesApiResponse {
+  images?: ImageApiItem[];
+}
 
-export const loadImages = (): ImageItem[] => {
-  if (typeof window === "undefined") {
-    return cloneImages(seedImages);
-  }
-
-  const raw = window.localStorage.getItem(STORAGE_KEY);
+const normalizeDate = (value: unknown): string => {
+  const raw = String(value ?? "").trim();
   if (!raw) {
-    const initial = cloneImages(seedImages);
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
-    return initial;
+    return "";
   }
 
-  try {
-    const parsed = JSON.parse(raw) as ImageItem[];
-    if (!Array.isArray(parsed)) {
-      throw new Error("Invalid images payload");
-    }
-
-    return parsed.map((image) => ({
-      id: String(image.id),
-      title: String(image.title ?? ""),
-      imageUrl: String(image.imageUrl ?? ""),
-      publishedAt: String(image.publishedAt ?? ""),
-      enabled: image.enabled === 1 ? (1 as const) : (0 as const),
-    }));
-  } catch {
-    const initial = cloneImages(seedImages);
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
-    return initial;
+  const ddmmyyyyMatch = raw.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  if (ddmmyyyyMatch) {
+    const [, day, month, year] = ddmmyyyyMatch;
+    return `${year}-${month}-${day}`;
   }
+
+  const yyyymmddMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (yyyymmddMatch) {
+    return raw;
+  }
+
+  return "";
 };
 
-export const saveImages = (images: ImageItem[]) => {
-  if (typeof window === "undefined") {
-    return;
+const serializeDate = (value: string): string => {
+  const raw = value.trim();
+  if (!raw) {
+    return "";
   }
 
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(images));
+  const yyyymmddMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (yyyymmddMatch) {
+    const [, year, month, day] = yyyymmddMatch;
+    return `${day}-${month}-${year}`;
+  }
+
+  return raw;
 };
 
-export const upsertImage = (imageItem: ImageItem) => {
-  const images = loadImages();
-  const index = images.findIndex((item) => item.id === imageItem.id);
+const normalizeImage = (image: ImageApiItem): ImageItem => ({
+  id: String(image.image_id ?? image.iamge_id ?? ""),
+  title: String(image.image_title ?? ""),
+  imageUrl: String(image.image_url ?? image.image__url ?? ""),
+  publishedAt: normalizeDate(image.image_date),
+  enabled: Number(image.image_enabled) === 1 ? (1 as const) : (0 as const),
+  order: Number(image.image_order ?? 0),
+});
 
-  if (index >= 0) {
-    images[index] = imageItem;
-  } else {
-    images.unshift(imageItem);
+export const fetchImages = async (): Promise<ImageItem[]> => {
+  const response = await fetch(IMAGES_API_URL);
+  if (!response.ok) {
+    throw new Error(`Error ${response.status}`);
   }
 
-  saveImages(images);
+  const payload = (await response.json()) as ImagesApiResponse;
+  const items = Array.isArray(payload.images) ? payload.images : [];
+
+  return items
+    .map(normalizeImage)
+    .filter((image) => image.id.trim().length > 0)
+    .sort((first, second) => first.order - second.order);
 };
 
-export const removeImage = (id: string) => {
-  const images = loadImages().filter((image) => image.id !== id);
-  saveImages(images);
+export const fetchImageById = async (id: string): Promise<ImageItem | null> => {
+  const images = await fetchImages();
+  return images.find((image) => image.id === id) ?? null;
 };
 
-export const moveImage = (id: string, direction: "up" | "down") => {
-  const images = loadImages();
-  const index = images.findIndex((image) => image.id === id);
-  if (index < 0) {
-    return;
-  }
+export const saveImage = async (
+  image: ImageItem,
+  mode: "create" | "edit"
+): Promise<void> => {
+  const payload = {
+    image_id: image.id,
+    image_title: image.title.trim(),
+    image_url: image.imageUrl.trim(),
+    image_date: serializeDate(image.publishedAt),
+    image_enabled: image.enabled,
+  };
 
-  const targetIndex = direction === "up" ? index - 1 : index + 1;
-  if (targetIndex < 0 || targetIndex >= images.length) {
-    return;
-  }
+  const response = await fetch(IMAGES_API_URL, {
+    method: mode === "create" ? "POST" : "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
 
-  const [item] = images.splice(index, 1);
-  images.splice(targetIndex, 0, item);
-  saveImages(images);
+  if (!response.ok) {
+    throw new Error(`Error ${response.status}`);
+  }
 };
 
 export const createEmptyImage = (): ImageItem => ({
-  id: `image-${Date.now()}`,
+  id: crypto.randomUUID(),
   title: "",
   imageUrl: "",
   publishedAt: "",
   enabled: 1,
+  order: 0,
 });
