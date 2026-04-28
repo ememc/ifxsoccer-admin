@@ -5,6 +5,7 @@ import Label from "../../../components/form/Label";
 import Input from "../../../components/form/input/InputField";
 import S3ImageManager from "../../../components/page/S3ImageManager";
 import Button from "../../../components/ui/button/Button";
+import { URL_API_BASE } from "../../../config/api";
 import { resolveS3ImageUrl } from "../../../utils/s3Image";
 
 interface Hero {
@@ -17,8 +18,6 @@ interface Hero {
 }
 
 export default function Hero() {
-    const API_URL = "https://pqzs7h6sgdo23n2ano66himzoy0jwuxw.lambda-url.us-west-1.on.aws/";
-
     const { id } = useParams<{ id: string }>();
 
     const [hero, setHero] = useState<Hero | null>(null);
@@ -44,7 +43,7 @@ export default function Hero() {
             setError(null);
 
             try {
-                const res = await fetch(API_URL);
+                const res = await fetch(URL_API_BASE);
                 if (!res.ok) {
                     throw new Error(`Error ${res.status}`);
                 }
@@ -82,7 +81,7 @@ export default function Hero() {
         }
 
         void load();
-    }, [API_URL, decodedId, numericDecodedId]);
+    }, [decodedId, numericDecodedId]);
 
     const safeHero: Hero = hero ?? {
         id: Number.isNaN(numericDecodedId) ? decodedId : numericDecodedId,
@@ -113,7 +112,7 @@ export default function Hero() {
             let lastStatus: number | null = null;
 
             for (const method of methods) {
-                const response = await fetch(API_URL, {
+                const response = await fetch(URL_API_BASE, {
                     method,
                     headers: {
                         "Content-Type": "application/json",

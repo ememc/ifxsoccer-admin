@@ -12,18 +12,32 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
-import { ImageItem, loadImages, moveImage, removeImage } from "./imageData";
+import { fetchImages } from "./imageData";
+import type { ImageItem } from "./imageData";
 
 export default function ImagesList() {
   const navigate = useNavigate();
   const [data, setData] = useState<ImageItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const refreshData = () => {
-    setData(loadImages());
+  const refreshData = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const images = await fetchImages();
+      setData(images);
+    } catch {
+      setData([]);
+      setError("No se pudieron cargar las imagenes del API.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    refreshData();
+    void refreshData();
   }, []);
 
   const onEdit = (id: string) => {
@@ -32,21 +46,6 @@ export default function ImagesList() {
 
   const onCreate = () => {
     navigate("/images/new");
-  };
-
-  const onDelete = (id: string) => {
-    const confirmed = window.confirm("Deseas borrar esta imagen?");
-    if (!confirmed) {
-      return;
-    }
-
-    removeImage(id);
-    refreshData();
-  };
-
-  const onMove = (id: string, direction: "up" | "down") => {
-    moveImage(id, direction);
-    refreshData();
   };
 
   return (
@@ -81,14 +80,38 @@ export default function ImagesList() {
                   </TableRow>
                 </TableHeader>
                 <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
-                  {data.map((item, index) => (
+                  {loading && (
+                    <TableRow>
+                      <td colSpan={5} className="px-5 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+                        Cargando imagenes...
+                      </td>
+                    </TableRow>
+                  )}
+
+                  {!loading && error && (
+                    <TableRow>
+                      <td colSpan={5} className="px-5 py-6 text-center text-sm text-error-600 dark:text-error-400">
+                        {error}
+                      </td>
+                    </TableRow>
+                  )}
+
+                  {!loading && !error && data.length === 0 && (
+                    <TableRow>
+                      <td colSpan={5} className="px-5 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+                        No hay imagenes para mostrar.
+                      </td>
+                    </TableRow>
+                  )}
+
+                  {!loading && !error && data.map((item, index) => (
                     <TableRow key={item.id}>
                       <TableCell className="px-5 py-4">
                         {item.imageUrl ? (
                           <div className="h-14 w-24 overflow-hidden rounded-md">
                             <img
                               src={item.imageUrl}
-                              alt={item.title}
+                              alt={item.alt || item.title}
                               className="h-full w-full object-cover"
                               onError={(event) => {
                                 event.currentTarget.src = "/images/logo/ifx-logo.png";
@@ -111,24 +134,9 @@ export default function ImagesList() {
                         </Badge>
                       </TableCell>
                       <TableCell className="px-4 py-3">
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onMove(item.id, "up")}
-                            disabled={index === 0}
-                          >
-                            Up
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onMove(item.id, "down")}
-                            disabled={index === data.length - 1}
-                          >
-                            Down
-                          </Button>
-                        </div>
+                        <span className="text-sm text-gray-600 dark:text-gray-300">
+                          {item.order ?? index + 1}
+                        </span>
                       </TableCell>
                       <TableCell className="px-4 py-3">
                         <div className="flex gap-2">
@@ -138,9 +146,6 @@ export default function ImagesList() {
                             onClick={() => onEdit(item.id)}
                           >
                             Edit
-                          </Button>
-                          <Button size="sm" onClick={() => onDelete(item.id)}>
-                            Delete
                           </Button>
                         </div>
                       </TableCell>

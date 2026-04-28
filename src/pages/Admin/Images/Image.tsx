@@ -7,7 +7,7 @@ import Label from "../../../components/form/Label";
 import Input from "../../../components/form/input/InputField";
 import S3ImageManager from "../../../components/page/S3ImageManager";
 import Button from "../../../components/ui/button/Button";
-import { createEmptyImage, loadImages, upsertImage } from "./imageData";
+import { createEmptyImage, fetchImage, loadImages, updateImage as updateImageRequest } from "./imageData";
 import type { ImageItem } from "./imageData";
 
 export default function Image() {
@@ -15,7 +15,11 @@ export default function Image() {
   const { id } = useParams<{ id: string }>();
 
   const [imageItem, setImageItem] = useState<ImageItem | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const decodedId = useMemo(() => {
     if (!id || id === "new") {
@@ -32,11 +36,46 @@ export default function Image() {
   useEffect(() => {
     if (decodedId === "" || decodedId === "new") {
       setImageItem(createEmptyImage());
+      setLoadError(null);
+      setLoading(false);
       return;
     }
 
-    const found = loadImages().find((item) => item.id === decodedId);
-    setImageItem(found ?? createEmptyImage());
+    let isCurrent = true;
+
+    const loadImage = async () => {
+      setLoading(true);
+      setLoadError(null);
+
+      try {
+        const found = await fetchImage(decodedId);
+
+        if (!isCurrent) {
+          return;
+        }
+
+        setImageItem(found);
+      } catch {
+        const fallback = loadImages().find((item) => item.id === decodedId);
+
+        if (!isCurrent) {
+          return;
+        }
+
+        setImageItem(fallback ?? createEmptyImage());
+        setLoadError("No se pudo cargar la imagen del API.");
+      } finally {
+        if (isCurrent) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadImage();
+
+    return () => {
+      isCurrent = false;
+    };
   }, [decodedId]);
 
   const safeImage = imageItem ?? createEmptyImage();
@@ -44,14 +83,26 @@ export default function Image() {
   const updateImage = (patch: Partial<ImageItem>) => {
     setImageItem({ ...safeImage, ...patch });
     setSaveMessage(null);
+    setSaveError(null);
   };
 
-  const onSave = () => {
-    upsertImage(safeImage);
-    setSaveMessage("Imagen guardada localmente.");
+  const onSave = async () => {
+    setIsSaving(true);
+    setSaveMessage(null);
+    setSaveError(null);
 
-    if (decodedId === "new") {
-      navigate(`/images/${btoa(safeImage.id)}`, { replace: true });
+    try {
+      const updatedImage = await updateImageRequest(safeImage);
+      setImageItem(updatedImage);
+      setSaveMessage("Imagen actualizada correctamente.");
+
+      if (decodedId === "new") {
+        navigate(`/images/${btoa(updatedImage.id)}`, { replace: true });
+      }
+    } catch {
+      setSaveError("No se pudo actualizar la imagen en el API.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -71,12 +122,34 @@ export default function Image() {
                   {saveMessage}
                 </p>
               )}
+              {saveError && (
+                <p className="text-sm text-error-600 dark:text-error-400">
+                  {saveError}
+                </p>
+              )}
+              {loading && (
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Cargando imagen...
+                </p>
+              )}
+              {loadError && (
+                <p className="text-sm text-error-600 dark:text-error-400">
+                  {loadError}
+                </p>
+              )}
             </div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => navigate("/images-list")}>
                 Back to List
               </Button>
-              <Button onClick={onSave}>Save Image</Button>
+              <Button
+                onClick={() => {
+                  void onSave();
+                }}
+                disabled={loading || isSaving}
+              >
+                {isSaving ? "Saving..." : "Save Image"}
+              </Button>
             </div>
           </div>
 
@@ -128,6 +201,31 @@ export default function Image() {
                   onChange={(e) => updateImage({ imageUrl: e.target.value })}
                   placeholder="https://.../image.jpg"
                 />
+              </div>
+
+              <div className="grid gap-6 lg:grid-cols-2">
+                <div>
+                  <Label htmlFor="image-alt">Alt Text</Label>
+                  <Input
+                    id="image-alt"
+                    value={safeImage.alt ?? ""}
+                    onChange={(e) => updateImage({ alt: e.target.value })}
+                    placeholder="Texto alternativo de la imagen"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="image-order">Order</Label>
+                  <Input
+                    id="image-order"
+                    type="number"
+                    value={safeImage.order ?? ""}
+                    onChange={(e) => {
+                      const order = e.target.value === "" ? undefined : Number(e.target.value);
+                      updateImage({ order: Number.isFinite(order) ? order : undefined });
+                    }}
+                    placeholder="Orden"
+                  />
+                </div>
               </div>
 
               <div>

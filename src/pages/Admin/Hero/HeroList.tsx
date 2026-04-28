@@ -4,6 +4,7 @@ import PageBreadcrumb from "../../../components/common/PageBreadCrumb";
 import ComponentCard from "../../../components/common/ComponentCard";
 import PageMeta from "../../../components/common/PageMeta";
 import { useNavigate } from "react-router-dom";
+import { URL_API_BASE } from "../../../config/api";
 
 import {
     Table,
@@ -39,7 +40,7 @@ export default function HeroList() {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const response = await fetch('https://pqzs7h6sgdo23n2ano66himzoy0jwuxw.lambda-url.us-west-1.on.aws/');
+                const response = await fetch(URL_API_BASE);
                 if (!response.ok) {
                     throw new Error("Network response was not ok");
                 }
