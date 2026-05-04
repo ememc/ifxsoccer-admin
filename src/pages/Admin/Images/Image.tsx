@@ -7,7 +7,13 @@ import Label from "../../../components/form/Label";
 import Input from "../../../components/form/input/InputField";
 import S3ImageManager from "../../../components/page/S3ImageManager";
 import Button from "../../../components/ui/button/Button";
-import { createEmptyImage, fetchImage, loadImages, updateImage as updateImageRequest } from "./imageData";
+import {
+  createEmptyImage,
+  createImage as createImageRequest,
+  fetchImage,
+  loadImages,
+  updateImage as updateImageRequest,
+} from "./imageData";
 import type { ImageItem } from "./imageData";
 
 export default function Image() {
@@ -92,15 +98,25 @@ export default function Image() {
     setSaveError(null);
 
     try {
-      const updatedImage = await updateImageRequest(safeImage);
-      setImageItem(updatedImage);
-      setSaveMessage("Imagen actualizada correctamente.");
+      const isNewImage = decodedId === "new";
+      const savedImage = isNewImage
+        ? await createImageRequest(safeImage)
+        : await updateImageRequest(safeImage);
 
-      if (decodedId === "new") {
-        navigate(`/images/${btoa(updatedImage.id)}`, { replace: true });
+      setImageItem(savedImage);
+      setSaveMessage(
+        isNewImage ? "Imagen creada correctamente." : "Imagen actualizada correctamente."
+      );
+
+      if (isNewImage) {
+        navigate(`/images/${btoa(savedImage.id)}`, { replace: true });
       }
     } catch {
-      setSaveError("No se pudo actualizar la imagen en el API.");
+      setSaveError(
+        decodedId === "new"
+          ? "No se pudo crear la imagen en el API."
+          : "No se pudo actualizar la imagen en el API."
+      );
     } finally {
       setIsSaving(false);
     }

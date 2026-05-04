@@ -26,8 +26,6 @@ interface IndexedImageItem extends ImageItem {
 
 export const IMAGES_API_URL = `${URL_API_BASE.replace(/\/+$/, "")}/images`;
 
-const getImageApiUrl = (id: string) => `${IMAGES_API_URL}/${encodeURIComponent(id)}`;
-
 const STORAGE_KEY = "ifx-admin-images";
 
 const seedImages: ImageItem[] = [
@@ -124,15 +122,49 @@ const extractApiImages = (payload: unknown): ApiImage[] => {
   return [];
 };
 
-const toApiImage = (imageItem: ImageItem): ApiImage => ({
-  image_alt: imageItem.alt ?? "",
-  image_date: imageItem.publishedAt,
-  image_enabled: imageItem.enabled,
-  image_id: imageItem.id,
-  image_order: imageItem.order ?? null,
-  image_title: imageItem.title,
-  image_url: imageItem.imageUrl,
+const toApiImageBody = (imageItem: ImageItem, includeImageId: boolean): ApiImage => {
+  const apiImage: ApiImage = {
+    image_alt: imageItem.alt ?? "",
+    image_date: imageItem.publishedAt,
+    image_enabled: imageItem.enabled === 1,
+    image_order: imageItem.order ?? null,
+    image_title: imageItem.title,
+    image_url: imageItem.imageUrl,
+  };
+
+  if (includeImageId) {
+    apiImage.image_id = imageItem.id;
+  }
+
+  return apiImage;
+};
+
+const toImageMutationEvent = (httpMethod: "POST" | "PUT", imageItem: ImageItem) => ({
+  httpMethod,
+  pathParameters: {
+    image_id: imageItem.id,
+  },
+  body: JSON.stringify(toApiImageBody(imageItem, httpMethod === "POST")),
 });
+
+export const generateGuid = (): string => {
+  const randomUUID = globalThis.crypto?.randomUUID?.();
+
+  if (randomUUID) {
+    return randomUUID;
+  }
+
+  const randomHex = (length: number) =>
+    Array.from({ length }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+
+  return [
+    randomHex(8),
+    randomHex(4),
+    `4${randomHex(3)}`,
+    `${(8 + Math.floor(Math.random() * 4)).toString(16)}${randomHex(3)}`,
+    randomHex(12),
+  ].join("-");
+};
 
 const parseImageResponse = (payload: unknown, fallback: ImageItem): ImageItem => {
   const bodyPayload = parseApiBody(payload);
@@ -209,7 +241,18 @@ export const fetchImage = async (id: string): Promise<ImageItem> => {
     publishedAt: "",
     enabled: 1,
   };
-  const response = await fetch(getImageApiUrl(id));
+  const response = await fetch(IMAGES_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      httpMethod: "GET",
+      pathParameters: {
+        image_id: id,
+      },
+    }),
+  });
 
   if (!response.ok) {
     throw new Error(`Error ${response.status}`);
@@ -222,12 +265,12 @@ export const fetchImage = async (id: string): Promise<ImageItem> => {
 };
 
 export const updateImage = async (imageItem: ImageItem): Promise<ImageItem> => {
-  const response = await fetch(getImageApiUrl(imageItem.id), {
-    method: "PUT",
+  const response = await fetch(IMAGES_API_URL, {
+    method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(toApiImage(imageItem)),
+    body: JSON.stringify(toImageMutationEvent("PUT", imageItem)),
   });
 
   if (!response.ok) {
@@ -238,6 +281,30 @@ export const updateImage = async (imageItem: ImageItem): Promise<ImageItem> => {
   assertSuccessfulApiPayload(payload);
 
   return parseImageResponse(payload, imageItem);
+};
+
+export const createImage = async (imageItem: ImageItem): Promise<ImageItem> => {
+  const imageToCreate = {
+    ...imageItem,
+    id: imageItem.id || generateGuid(),
+  };
+
+  const response = await fetch(IMAGES_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(toImageMutationEvent("POST", imageToCreate)),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Error ${response.status}`);
+  }
+
+  const payload = await readJsonResponse(response);
+  assertSuccessfulApiPayload(payload);
+
+  return parseImageResponse(payload, imageToCreate);
 };
 
 export const loadImages = (): ImageItem[] => {
@@ -318,7 +385,7 @@ export const moveImage = (id: string, direction: "up" | "down") => {
 };
 
 export const createEmptyImage = (): ImageItem => ({
-  id: `image-${Date.now()}`,
+  id: generateGuid(),
   title: "",
   imageUrl: "",
   publishedAt: "",
