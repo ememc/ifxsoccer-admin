@@ -12,18 +12,34 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
-import { VideoItem, loadVideos, moveVideo, removeVideo } from "./videoData";
+import { VideoIcon } from "../../../icons";
+import { getVideoPreview } from "../../../utils/videoPreview";
+import { fetchVideos } from "./videoData";
+import type { VideoItem } from "./videoData";
 
 export default function VideosList() {
   const navigate = useNavigate();
   const [data, setData] = useState<VideoItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const refreshData = () => {
-    setData(loadVideos());
+  const refreshData = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const videos = await fetchVideos();
+      setData(videos);
+    } catch {
+      setData([]);
+      setError("No se pudieron cargar los videos del API.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    refreshData();
+    void refreshData();
   }, []);
 
   const onEdit = (id: string) => {
@@ -32,21 +48,6 @@ export default function VideosList() {
 
   const onCreate = () => {
     navigate("/videos/new");
-  };
-
-  const onDelete = (id: string) => {
-    const confirmed = window.confirm("Deseas borrar este video?");
-    if (!confirmed) {
-      return;
-    }
-
-    removeVideo(id);
-    refreshData();
-  };
-
-  const onMove = (id: string, direction: "up" | "down") => {
-    moveVideo(id, direction);
-    refreshData();
   };
 
   return (
@@ -81,70 +82,105 @@ export default function VideosList() {
                   </TableRow>
                 </TableHeader>
                 <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
-                  {data.map((item, index) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="px-5 py-4">
-                        {item.videoUrl ? (
-                          <div className="h-14 w-24 overflow-hidden rounded-md bg-black">
-                            <video
-                              src={item.videoUrl}
-                              className="h-full w-full object-cover"
-                              muted
-                              playsInline
-                              preload="metadata"
-                            />
-                          </div>
-                        ) : (
-                          <div className="flex h-14 w-24 items-center justify-center rounded-md bg-gray-100 text-xs text-gray-400 dark:bg-gray-800">
-                            N/A
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell className="px-5 py-4">{item.title}</TableCell>
-                      <TableCell className="px-4 py-3">
-                        <Badge
-                          size="sm"
-                          color={item.enabled === 1 ? "success" : "error"}
-                        >
-                          {item.enabled === 1 ? "Enabled" : "Disabled"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="px-4 py-3">
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onMove(item.id, "up")}
-                            disabled={index === 0}
-                          >
-                            Up
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onMove(item.id, "down")}
-                            disabled={index === data.length - 1}
-                          >
-                            Down
-                          </Button>
-                        </div>
-                      </TableCell>
-                      <TableCell className="px-4 py-3">
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onEdit(item.id)}
-                          >
-                            Edit
-                          </Button>
-                          <Button size="sm" onClick={() => onDelete(item.id)}>
-                            Delete
-                          </Button>
-                        </div>
-                      </TableCell>
+                  {loading && (
+                    <TableRow>
+                      <td colSpan={5} className="px-5 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+                        Cargando videos...
+                      </td>
                     </TableRow>
-                  ))}
+                  )}
+
+                  {!loading && error && (
+                    <TableRow>
+                      <td colSpan={5} className="px-5 py-6 text-center text-sm text-error-600 dark:text-error-400">
+                        {error}
+                      </td>
+                    </TableRow>
+                  )}
+
+                  {!loading && !error && data.length === 0 && (
+                    <TableRow>
+                      <td colSpan={5} className="px-5 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+                        No hay videos para mostrar.
+                      </td>
+                    </TableRow>
+                  )}
+
+                  {!loading && !error && data.map((item, index) => {
+                    const preview = getVideoPreview(item.videoUrl);
+
+                    return (
+                      <TableRow key={item.id}>
+                        <TableCell className="px-5 py-4">
+                          {preview?.kind === "youtube" && (
+                            <div className="relative h-16 w-28 overflow-hidden rounded-md bg-black">
+                              <img
+                                src={preview.thumbnailUrl}
+                                alt={item.alt || item.title}
+                                className="h-full w-full object-cover"
+                                onError={(event) => {
+                                  event.currentTarget.src = "/images/logo/ifx-logo.png";
+                                }}
+                              />
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/25">
+                                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-brand-600 shadow-theme-xs dark:bg-gray-900/90 dark:text-brand-300">
+                                  <VideoIcon className="h-4 w-4" />
+                                </span>
+                              </div>
+                            </div>
+                          )}
+
+                          {preview?.kind === "file" && (
+                            <div className="relative h-16 w-28 overflow-hidden rounded-md bg-black">
+                              <video
+                                src={preview.sourceUrl}
+                                className="h-full w-full object-cover"
+                                muted
+                                playsInline
+                                preload="metadata"
+                              />
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/25">
+                                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-brand-600 shadow-theme-xs dark:bg-gray-900/90 dark:text-brand-300">
+                                  <VideoIcon className="h-4 w-4" />
+                                </span>
+                              </div>
+                            </div>
+                          )}
+
+                          {!preview && (
+                            <div className="flex h-16 w-28 items-center justify-center rounded-md bg-gray-100 text-xs text-gray-400 dark:bg-gray-800">
+                              N/A
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="px-5 py-4">{item.title}</TableCell>
+                        <TableCell className="px-4 py-3">
+                          <Badge
+                            size="sm"
+                            color={item.enabled === 1 ? "success" : "error"}
+                          >
+                            {item.enabled === 1 ? "Enabled" : "Disabled"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          <span className="text-sm text-gray-600 dark:text-gray-300">
+                            {item.order ?? index + 1}
+                          </span>
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => onEdit(item.id)}
+                            >
+                              Edit
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>

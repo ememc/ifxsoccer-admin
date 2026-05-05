@@ -4,7 +4,6 @@ import Badge from "../../../components/ui/badge/Badge";
 import PageBreadcrumb from "../../../components/common/PageBreadCrumb";
 import ComponentCard from "../../../components/common/ComponentCard";
 import PageMeta from "../../../components/common/PageMeta";
-import Input from "../../../components/form/input/InputField";
 import Button from "../../../components/ui/button/Button";
 import {
   Table,
@@ -13,16 +12,35 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
-import { News, createEmptyNews, loadNews, removeNews, upsertNews } from "./newsData";
+import { fetchNews, getNewsDisplayTitle, getNewsPlainText } from "./newsData";
+import type { News } from "./newsData";
+
+const truncateText = (value: string, maxLength = 120) =>
+  value.length > maxLength ? `${value.slice(0, maxLength).trim()}...` : value;
 
 export default function NewsList() {
   const navigate = useNavigate();
   const [data, setData] = useState<News[]>([]);
-  const [newNewsTitle, setNewNewsTitle] = useState("");
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refreshData = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const news = await fetchNews();
+      setData(news);
+    } catch {
+      setData([]);
+      setError("No se pudieron cargar las noticias del API.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    setData(loadNews());
+    void refreshData();
   }, []);
 
   const onEdit = (id: string) => {
@@ -33,60 +51,12 @@ export default function NewsList() {
     navigate("/news/new");
   };
 
-  const onDelete = (id: string) => {
-    const confirmed = window.confirm("Deseas borrar esta noticia?");
-    if (!confirmed) {
-      return;
-    }
-
-    removeNews(id);
-    setData(loadNews());
-  };
-
-  const onQuickSave = () => {
-    const title = newNewsTitle.trim();
-    if (!title) {
-      setSaveMessage("Escribe un News Title antes de guardar.");
-      return;
-    }
-
-    const newsItem = createEmptyNews();
-    newsItem.title = title;
-    upsertNews(newsItem);
-    setData(loadNews());
-    setNewNewsTitle("");
-    setSaveMessage("Noticia guardada.");
-  };
-
   return (
     <>
       <PageMeta title="News List" description="News List" />
       <PageBreadcrumb pageTitle="News List" />
       <div className="space-y-6">
         <ComponentCard title="News">
-          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-            <div className="min-w-[260px] flex-1">
-              <label
-                htmlFor="news-title-quick-save"
-                className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200"
-              >
-                News Title
-              </label>
-              <Input
-                id="news-title-quick-save"
-                value={newNewsTitle}
-                onChange={(e) => {
-                  setNewNewsTitle(e.target.value);
-                  setSaveMessage(null);
-                }}
-                placeholder="Write the news title"
-              />
-            </div>
-            <Button onClick={onQuickSave}>Save News</Button>
-          </div>
-          {saveMessage && (
-            <p className="mb-3 text-sm text-gray-600 dark:text-gray-300">{saveMessage}</p>
-          )}
           <div className="mb-4 flex items-center justify-end">
             <Button onClick={onCreate}>New News</Button>
           </div>
@@ -99,7 +69,16 @@ export default function NewsList() {
                       Image
                     </TableCell>
                     <TableCell isHeader className="px-5 py-3 text-start">
-                      Title
+                      Content
+                    </TableCell>
+                    <TableCell isHeader className="px-5 py-3 text-start">
+                      Category
+                    </TableCell>
+                    <TableCell isHeader className="px-5 py-3 text-start">
+                      Date
+                    </TableCell>
+                    <TableCell isHeader className="px-5 py-3 text-start">
+                      State
                     </TableCell>
                     <TableCell isHeader className="px-5 py-3 text-start">
                       Status
@@ -110,48 +89,98 @@ export default function NewsList() {
                   </TableRow>
                 </TableHeader>
                 <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
-                  {data.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="px-5 py-4">
-                        {item.image ? (
-                          <div className="h-10 w-10 overflow-hidden rounded-md">
-                            <img
-                              src={item.image}
-                              alt={item.title}
-                              className="h-full w-full object-cover"
-                            />
-                          </div>
-                        ) : (
-                          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-gray-100 text-xs text-gray-400 dark:bg-gray-800">
-                            N/A
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell className="px-5 py-4">{item.title}</TableCell>
-                      <TableCell className="px-4 py-3">
-                        <Badge
-                          size="sm"
-                          color={item.enabled === 1 ? "success" : "error"}
-                        >
-                          {item.enabled === 1 ? "Enabled" : "Disabled"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="px-4 py-3">
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onEdit(item.id)}
-                          >
-                            Edit
-                          </Button>
-                          <Button size="sm" onClick={() => onDelete(item.id)}>
-                            Delete
-                          </Button>
-                        </div>
-                      </TableCell>
+                  {loading && (
+                    <TableRow>
+                      <td colSpan={7} className="px-5 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+                        Cargando noticias...
+                      </td>
                     </TableRow>
-                  ))}
+                  )}
+
+                  {!loading && error && (
+                    <TableRow>
+                      <td colSpan={7} className="px-5 py-6 text-center text-sm text-error-600 dark:text-error-400">
+                        {error}
+                      </td>
+                    </TableRow>
+                  )}
+
+                  {!loading && !error && data.length === 0 && (
+                    <TableRow>
+                      <td colSpan={7} className="px-5 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+                        No hay noticias para mostrar.
+                      </td>
+                    </TableRow>
+                  )}
+
+                  {!loading && !error && data.map((item) => {
+                    const title = getNewsDisplayTitle(item);
+                    const plainText = getNewsPlainText(item.text);
+                    const excerpt = plainText && plainText !== title ? plainText : item.tags;
+
+                    return (
+                      <TableRow key={item.id}>
+                        <TableCell className="px-5 py-4">
+                          {item.image ? (
+                            <div className="h-14 w-24 overflow-hidden rounded-md">
+                              <img
+                                src={item.image}
+                                alt={title}
+                                className="h-full w-full object-cover"
+                                onError={(event) => {
+                                  event.currentTarget.src = "/images/logo/ifx-logo.png";
+                                }}
+                              />
+                            </div>
+                          ) : (
+                            <div className="flex h-14 w-24 items-center justify-center rounded-md bg-gray-100 text-xs text-gray-400 dark:bg-gray-800">
+                              N/A
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="px-5 py-4">
+                          <div className="max-w-[360px]">
+                            <p className="font-medium text-gray-800 dark:text-white/90">
+                              {truncateText(title, 80)}
+                            </p>
+                            {excerpt && (
+                              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                                {truncateText(excerpt)}
+                              </p>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="px-5 py-4">
+                          {item.category || "N/A"}
+                        </TableCell>
+                        <TableCell className="px-5 py-4">{item.date || "N/A"}</TableCell>
+                        <TableCell className="px-5 py-4">
+                          <Badge size="sm" color={item.state ? "info" : "light"}>
+                            {item.state || "N/A"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          <Badge
+                            size="sm"
+                            color={item.enabled === 1 ? "success" : "error"}
+                          >
+                            {item.enabled === 1 ? "Enabled" : "Disabled"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => onEdit(item.id)}
+                            >
+                              Edit
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
