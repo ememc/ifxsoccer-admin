@@ -114,7 +114,10 @@ const AppSidebar: React.FC = () => {
   const isSubItemActive = useCallback(
     (path: string) => {
       if (isActive(path)) return true;
-      if (path === "/hero-list" && location.pathname.startsWith("/hero/")) return true;
+      if (
+        path === "/hero-list" &&
+        (location.pathname.startsWith("/hero/") || location.pathname.startsWith("/heros/"))
+      ) return true;
       if (path === "/programs-list" && location.pathname.startsWith("/programs/")) return true;
       if (path === "/destinations-list" && location.pathname.startsWith("/destinations/")) return true;
       if (path === "/categories-list" && location.pathname.startsWith("/categories/")) return true;

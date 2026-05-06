@@ -1,317 +1,528 @@
-export interface ProgramSection {
-  id: string;
-  title: string;
-  text: string;
-  image: string;
+import { URL_API_BASE } from "../../../config/api";
+import { generateGuid } from "../../../utils/guid";
+
+export interface ProgramHero {
+  image_url: string;
+  image_text: string;
 }
 
-export interface ProgramHeroSlide {
-  id: string;
-  image: string;
-  caption: string;
-  applyNowUrl: string;
+export interface ProgramSection {
+  section_image: string;
+  section_title: string;
+  section_text: string;
+  section_order: string;
+}
+
+export interface ProgramPlayer {
+  player_image: string;
+  player_says: string;
+  player_description: string;
+}
+
+export interface ProgramDetail {
+  detail_title: string;
+  detail_text: string;
+  detail_file: string;
+}
+
+export interface ProgramVariation {
+  variations_description: string;
+  variations_dates: string;
+  variations_cost: string;
+  variations_deadline: string;
+}
+
+export interface ProgramAddon {
+  addons_title: string;
+  addons_description: string;
+  addons_cost: string;
+}
+
+export interface ProgramInformation {
+  information_title: string;
+  information_image: string;
+  information_url: string;
 }
 
 export interface Program {
-  id: string;
-  title: string;
-  mainImage: string;
-  heroImages: ProgramHeroSlide[];
-  primaryHeroImageId: string;
-  mainText: string;
-  learnMoreUrl: string;
-  applyOnlineUrl: string;
-  enabled: 0 | 1;
-  sections: ProgramSection[];
+  program_id: string;
+  program_hero: ProgramHero[];
+  program_title: string;
+  program_description: string;
+  program_section: ProgramSection[];
+  program_players: ProgramPlayer[];
+  program_details: ProgramDetail[];
+  program_variations: ProgramVariation[];
+  program_addons: ProgramAddon[];
+  program_information: ProgramInformation[];
+  program_category: string;
+  program_apply: string;
+  program_enabled: string | number | boolean;
+  program_status: string;
+  program_date: string;
 }
 
-const STORAGE_KEY = "ifx-admin-programs";
+type ProgramArrayKey =
+  | "program_hero"
+  | "program_section"
+  | "program_players"
+  | "program_details"
+  | "program_variations"
+  | "program_addons"
+  | "program_information";
 
-const seedPrograms: Program[] = [
-  {
-    id: "high-performance",
-    title: "High Performance Program",
-    mainImage:
-      "https://images.unsplash.com/photo-1547347298-4074fc3086f0?auto=format&fit=crop&w=1200&q=80",
-    heroImages: [
-      {
-        id: "high-performance-hero-1",
-        image:
-          "https://images.unsplash.com/photo-1547347298-4074fc3086f0?auto=format&fit=crop&w=1200&q=80",
-        caption: "YOU COULD BE NEXT!",
-        applyNowUrl: "https://ifxsoccer.com/apply/high-performance",
-      },
-      {
-        id: "high-performance-hero-2",
-        image:
-          "https://images.unsplash.com/photo-1518604666860-9ed391f76460?auto=format&fit=crop&w=1200&q=80",
-        caption: "SHOWCASE YOUR TALENT",
-        applyNowUrl: "https://ifxsoccer.com/apply/high-performance",
-      },
-      {
-        id: "high-performance-hero-3",
-        image:
-          "https://images.unsplash.com/photo-1471295253337-3ceaaedca402?auto=format&fit=crop&w=1200&q=80",
-        caption: "YOU COULD BE NEXT!",
-        applyNowUrl: "https://ifxsoccer.com/apply/high-performance",
-      },
-    ],
-    primaryHeroImageId: "high-performance-hero-1",
-    mainText:
-      "Programa enfocado en jugadores que buscan una ruta competitiva con entrenamiento, seguimiento y visibilidad.",
-    learnMoreUrl: "https://ifxsoccer.com/programs/high-performance",
-    applyOnlineUrl: "https://ifxsoccer.com/apply/high-performance",
-    enabled: 1,
-    sections: [
-      {
-        id: "high-performance-1",
-        title: "Entrenamiento Integral",
-        text: "Sesiones tecnicas, tacticas y fisicas disenadas para acelerar el desarrollo competitivo del jugador.",
-        image:
-          "https://images.unsplash.com/photo-1575361204480-aadea25e6e68?auto=format&fit=crop&w=1200&q=80",
-      },
-      {
-        id: "high-performance-2",
-        title: "Exposicion y Seguimiento",
-        text: "Acompanamiento del proceso con reportes, material visual y una estructura lista para escalar cuando el API este disponible.",
-        image:
-          "https://images.unsplash.com/photo-1517466787929-bc90951d0974?auto=format&fit=crop&w=1200&q=80",
-      },
-    ],
-  },
-  {
-    id: "summer-camp",
-    title: "Summer Camp",
-    mainImage:
-      "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1200&q=80",
-    heroImages: [
-      {
-        id: "summer-camp-hero-1",
-        image:
-          "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1200&q=80",
-        caption: "YOU COULD BE NEXT!",
-        applyNowUrl: "https://ifxsoccer.com/apply/summer-camp",
-      },
-      {
-        id: "summer-camp-hero-2",
-        image:
-          "https://images.unsplash.com/photo-1508098682722-e99c643e7485?auto=format&fit=crop&w=1200&q=80",
-        caption: "SHOWCASE YOUR TALENT",
-        applyNowUrl: "https://ifxsoccer.com/apply/summer-camp",
-      },
-    ],
-    primaryHeroImageId: "summer-camp-hero-1",
-    mainText:
-      "Experiencia intensiva para combinar entrenamiento, formacion personal y actividades complementarias.",
-    learnMoreUrl: "https://ifxsoccer.com/programs/summer-camp",
-    applyOnlineUrl: "https://ifxsoccer.com/apply/summer-camp",
-    enabled: 0,
-    sections: [
-      {
-        id: "summer-camp-1",
-        title: "Metodologia Diaria",
-        text: "Bloques estructurados para tecnica, toma de decisiones y contextos reales de juego.",
-        image:
-          "https://images.unsplash.com/photo-1508098682722-e99c643e7485?auto=format&fit=crop&w=1200&q=80",
-      },
-    ],
-  },
-];
+interface ApiProgram {
+  program_addons?: unknown;
+  program_apply?: unknown;
+  program_category?: unknown;
+  program_date?: unknown;
+  program_description?: unknown;
+  program_details?: unknown;
+  program_enabled?: unknown;
+  program_hero?: unknown;
+  program_id?: unknown;
+  program_information?: unknown;
+  program_players?: unknown;
+  program_section?: unknown;
+  program_status?: unknown;
+  program_title?: unknown;
+  program_variations?: unknown;
+}
 
-const clonePrograms = (programs: Program[]): Program[] =>
-  programs.map((program) => ({
-    ...program,
-    heroImages: program.heroImages.map((slide) => ({ ...slide })),
-    sections: program.sections.map((section) => ({ ...section })),
-  }));
+interface IndexedProgram extends Program {
+  sourceIndex: number;
+}
 
-const normalizeHeroSlides = (
-  heroImages: unknown,
-  mainImage: string,
-  applyOnlineUrl: string
-): ProgramHeroSlide[] => {
-  if (!Array.isArray(heroImages)) {
-    if (!mainImage) {
-      return [];
-    }
+export const PROGRAMS_API_URL = `${URL_API_BASE.replace(/\/+$/, "")}/programs/`;
 
-    return [
-      {
-        id: `hero-${Date.now()}-0`,
-        image: mainImage,
-        caption: "YOU COULD BE NEXT!",
-        applyNowUrl: applyOnlineUrl,
-      },
-    ];
-  }
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
 
-  if (heroImages.length === 0) {
-    return mainImage
-      ? [
-          {
-            id: `hero-${Date.now()}-0`,
-            image: mainImage,
-            caption: "YOU COULD BE NEXT!",
-            applyNowUrl: applyOnlineUrl,
-          },
-        ]
-      : [];
-  }
-
-  return heroImages
-    .map((slide, index) => {
-      if (typeof slide === "string") {
-        const image = slide.trim();
-        if (!image) {
-          return null;
-        }
-
-        return {
-          id: `hero-${Date.now()}-${index}`,
-          image,
-          caption: "YOU COULD BE NEXT!",
-          applyNowUrl: applyOnlineUrl,
-        };
-      }
-
-      if (!slide || typeof slide !== "object") {
-        return null;
-      }
-
-      const raw = slide as Record<string, unknown>;
-      const image = String(raw.image ?? "").trim();
-      if (!image) {
-        return null;
-      }
-
-      return {
-        id: String(raw.id ?? `hero-${Date.now()}-${index}`),
-        image,
-        caption: String(raw.caption ?? "YOU COULD BE NEXT!"),
-        applyNowUrl: String(raw.applyNowUrl ?? applyOnlineUrl),
-      };
-    })
-    .filter((slide): slide is ProgramHeroSlide => Boolean(slide));
+const readJsonResponse = async (response: Response): Promise<unknown> => {
+  const text = await response.text();
+  return text ? JSON.parse(text) : null;
 };
 
-export const loadPrograms = (): Program[] => {
-  if (typeof window === "undefined") {
-    return clonePrograms(seedPrograms);
+const parseApiBody = (payload: unknown): unknown => {
+  if (!isRecord(payload) || !("body" in payload)) {
+    return payload;
   }
 
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    const initial = clonePrograms(seedPrograms);
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
-    return initial;
+  const { body } = payload;
+  return typeof body === "string" ? (body ? JSON.parse(body) : null) : body;
+};
+
+const assertSuccessfulApiPayload = (payload: unknown) => {
+  const statusCode = isRecord(payload) ? Number(payload.statusCode) : Number.NaN;
+
+  if (isRecord(payload) && Number.isFinite(statusCode) && statusCode >= 400) {
+    const bodyPayload = parseApiBody(payload);
+    const message =
+      isRecord(bodyPayload) && typeof bodyPayload.message === "string"
+        ? bodyPayload.message
+        : `Error ${statusCode}`;
+
+    throw new Error(message);
   }
+};
+
+const unwrapDynamoObject = (value: Record<string, unknown>): Record<string, unknown> =>
+  Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [key, unwrapDynamoValue(entry)])
+  );
+
+const unwrapDynamoValue = (value: unknown): unknown => {
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  if ("S" in value) {
+    return value.S;
+  }
+
+  if ("N" in value) {
+    return value.N;
+  }
+
+  if ("BOOL" in value) {
+    return value.BOOL;
+  }
+
+  if ("NULL" in value) {
+    return null;
+  }
+
+  if ("L" in value && Array.isArray(value.L)) {
+    return value.L.map(unwrapDynamoValue);
+  }
+
+  if ("M" in value && isRecord(value.M)) {
+    return unwrapDynamoObject(value.M);
+  }
+
+  return value;
+};
+
+const normalizeApiDate = (value: unknown): string => {
+  const date = String(unwrapDynamoValue(value) ?? "");
+  const dayMonthYear = date.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+
+  if (!dayMonthYear) {
+    return date;
+  }
+
+  return `${dayMonthYear[3]}-${dayMonthYear[2]}-${dayMonthYear[1]}`;
+};
+
+export const normalizeEnabled = (value: Program["program_enabled"]): 0 | 1 => {
+  const enabled = unwrapDynamoValue(value);
+
+  if (
+    enabled === 1 ||
+    enabled === true ||
+    enabled === "1" ||
+    String(enabled).toLowerCase() === "true"
+  ) {
+    return 1;
+  }
+
+  return 0;
+};
+
+const stringValue = (value: unknown): string => String(unwrapDynamoValue(value) ?? "");
+
+const normalizeArray = <T>(
+  value: unknown,
+  mapper: (item: Record<string, unknown>) => T
+): T[] => {
+  const unwrapped = unwrapDynamoValue(value);
+
+  if (!Array.isArray(unwrapped)) {
+    return [];
+  }
+
+  return unwrapped.map((item) => {
+    const raw = unwrapDynamoValue(item);
+    return mapper(isRecord(raw) ? raw : {});
+  });
+};
+
+const extractApiPrograms = (payload: unknown): ApiProgram[] => {
+  const bodyPayload = parseApiBody(payload);
+
+  if (Array.isArray(bodyPayload)) {
+    return bodyPayload as ApiProgram[];
+  }
+
+  if (isRecord(bodyPayload) && Array.isArray(bodyPayload.program)) {
+    return bodyPayload.program as ApiProgram[];
+  }
+
+  if (isRecord(bodyPayload) && isRecord(bodyPayload.program)) {
+    return [bodyPayload.program as ApiProgram];
+  }
+
+  if (isRecord(bodyPayload) && Array.isArray(bodyPayload.programs)) {
+    return bodyPayload.programs as ApiProgram[];
+  }
+
+  if (isRecord(bodyPayload) && Array.isArray(bodyPayload.items)) {
+    return bodyPayload.items as ApiProgram[];
+  }
+
+  if (isRecord(bodyPayload) && Array.isArray(bodyPayload.Items)) {
+    return bodyPayload.Items as ApiProgram[];
+  }
+
+  if (isRecord(bodyPayload) && isRecord(bodyPayload.item)) {
+    return [bodyPayload.item as ApiProgram];
+  }
+
+  if (isRecord(bodyPayload) && isRecord(bodyPayload.Item)) {
+    return [bodyPayload.Item as ApiProgram];
+  }
+
+  if (isRecord(bodyPayload) && isRecord(bodyPayload.data)) {
+    return [bodyPayload.data as ApiProgram];
+  }
+
+  if (isRecord(payload) && Array.isArray(payload.program)) {
+    return payload.program as ApiProgram[];
+  }
+
+  if (isRecord(payload) && isRecord(payload.program)) {
+    return [payload.program as ApiProgram];
+  }
+
+  if (isRecord(payload) && Array.isArray(payload.programs)) {
+    return payload.programs as ApiProgram[];
+  }
+
+  return [];
+};
+
+const toApiProgramBody = (program: Program): ApiProgram => ({
+  program_addons: program.program_addons,
+  program_apply: program.program_apply,
+  program_category: program.program_category,
+  program_date: program.program_date,
+  program_description: program.program_description,
+  program_details: program.program_details,
+  program_enabled: normalizeEnabled(program.program_enabled) === 1,
+  program_hero: program.program_hero,
+  program_id: program.program_id,
+  program_information: program.program_information,
+  program_players: program.program_players,
+  program_section: program.program_section,
+  program_status: program.program_status,
+  program_title: program.program_title,
+  program_variations: program.program_variations,
+});
+
+const toProgramMutationEvent = (httpMethod: "POST" | "PUT", program: Program) => ({
+  httpMethod,
+  pathParameters: {
+    program_id: program.program_id,
+  },
+  body: JSON.stringify(toApiProgramBody(program)),
+});
+
+const isCorsLikeFailure = (error: unknown): boolean =>
+  error instanceof TypeError && /fetch|network|failed/i.test(error.message);
+
+const postProgramMutationEvent = async (
+  mutationEvent: ReturnType<typeof toProgramMutationEvent>
+): Promise<unknown | null> => {
+  const requestBody = JSON.stringify(mutationEvent);
 
   try {
-    const parsed = JSON.parse(raw) as Array<Record<string, unknown>>;
-    if (!Array.isArray(parsed)) {
-      throw new Error("Invalid programs payload");
+    const response = await fetch(PROGRAMS_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: requestBody,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error ${response.status}`);
     }
 
-    return parsed.map((program) => ({
-      id: String(program.id),
-      title: String(program.title ?? ""),
-      mainImage: String(program.mainImage ?? ""),
-      heroImages: normalizeHeroSlides(
-        program.heroImages,
-        String(program.mainImage ?? ""),
-        String(program.applyOnlineUrl ?? "")
-      ),
-      primaryHeroImageId: String(program.primaryHeroImageId ?? ""),
-      mainText: String(program.mainText ?? ""),
-      learnMoreUrl: String(program.learnMoreUrl ?? ""),
-      applyOnlineUrl: String(program.applyOnlineUrl ?? ""),
-      enabled: program.enabled === 1 ? (1 as const) : (0 as const),
-      sections: Array.isArray(program.sections)
-        ? program.sections.map((section) => ({
-            id: String(section.id),
-            title: String(section.title ?? ""),
-            text: String(section.text ?? ""),
-            image: String(section.image ?? ""),
-          }))
-        : [],
-    })).map((program) => {
-      const legacyPrimaryImage = String(
-        (program as unknown as Record<string, unknown>).primaryHeroImage ?? ""
-      );
-      const primaryByLegacyImage = program.heroImages.find(
-        (slide) => slide.image === legacyPrimaryImage
-      );
-      const fallbackPrimaryId =
-        program.primaryHeroImageId ||
-        primaryByLegacyImage?.id ||
-        program.heroImages[0]?.id ||
-        "";
-      const primarySlide =
-        program.heroImages.find((slide) => slide.id === fallbackPrimaryId) ??
-        program.heroImages[0];
+    const payload = await readJsonResponse(response);
+    assertSuccessfulApiPayload(payload);
 
-      return {
-        ...program,
-        primaryHeroImageId: primarySlide?.id ?? "",
-        mainImage: primarySlide?.image ?? "",
-      };
+    return payload;
+  } catch (error) {
+    if (!isCorsLikeFailure(error)) {
+      throw error;
+    }
+
+    await fetch(PROGRAMS_API_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: {
+        "Content-Type": "text/plain;charset=UTF-8",
+      },
+      body: requestBody,
     });
+
+    return null;
+  }
+};
+
+export const parseProgramsResponse = (payload: unknown): Program[] => {
+  const indexedPrograms: IndexedProgram[] = extractApiPrograms(payload).map(
+    (program, sourceIndex) => ({
+      program_id: stringValue(program.program_id || `program-${sourceIndex}`),
+      program_hero: normalizeArray(program.program_hero, (item) => ({
+        image_url: stringValue(item.image_url),
+        image_text: stringValue(item.image_text),
+      })),
+      program_title: stringValue(program.program_title),
+      program_description: stringValue(program.program_description),
+      program_section: normalizeArray(program.program_section, (item) => ({
+        section_image: stringValue(item.section_image),
+        section_title: stringValue(item.section_title),
+        section_text: stringValue(item.section_text),
+        section_order: stringValue(item.section_order),
+      })),
+      program_players: normalizeArray(program.program_players, (item) => ({
+        player_image: stringValue(item.player_image),
+        player_says: stringValue(item.player_says),
+        player_description: stringValue(item.player_description),
+      })),
+      program_details: normalizeArray(program.program_details, (item) => ({
+        detail_title: stringValue(item.detail_title),
+        detail_text: stringValue(item.detail_text),
+        detail_file: stringValue(item.detail_file),
+      })),
+      program_variations: normalizeArray(program.program_variations, (item) => ({
+        variations_description: stringValue(item.variations_description),
+        variations_dates: stringValue(item.variations_dates),
+        variations_cost: stringValue(item.variations_cost),
+        variations_deadline: stringValue(item.variations_deadline),
+      })),
+      program_addons: normalizeArray(program.program_addons, (item) => ({
+        addons_title: stringValue(item.addons_title),
+        addons_description: stringValue(item.addons_description),
+        addons_cost: stringValue(item.addons_cost),
+      })),
+      program_information: normalizeArray(program.program_information, (item) => ({
+        information_title: stringValue(item.information_title),
+        information_image: stringValue(item.information_image),
+        information_url: stringValue(item.information_url),
+      })),
+      program_category: stringValue(program.program_category),
+      program_apply: stringValue(program.program_apply),
+      program_enabled: unwrapDynamoValue(program.program_enabled) as Program["program_enabled"],
+      program_status: stringValue(program.program_status),
+      program_date: normalizeApiDate(program.program_date),
+      sourceIndex,
+    })
+  );
+
+  return indexedPrograms
+    .sort((first, second) => {
+      if (first.program_date !== second.program_date) {
+        return second.program_date.localeCompare(first.program_date);
+      }
+
+      return first.sourceIndex - second.sourceIndex;
+    })
+    .map(({ sourceIndex: _sourceIndex, ...program }) => program);
+};
+
+const parseProgramResponse = (payload: unknown, fallback: Program): Program => {
+  const programs = parseProgramsResponse(payload);
+  return programs.find((program) => program.program_id === fallback.program_id) ?? programs[0] ?? fallback;
+};
+
+const isFallbackProgram = (program: Program, fallback: Program): boolean =>
+  JSON.stringify(program) === JSON.stringify(fallback);
+
+export const fetchPrograms = async (): Promise<Program[]> => {
+  const response = await fetch(PROGRAMS_API_URL);
+
+  if (!response.ok) {
+    throw new Error(`Error ${response.status}`);
+  }
+
+  const payload = await readJsonResponse(response);
+  assertSuccessfulApiPayload(payload);
+
+  return parseProgramsResponse(payload);
+};
+
+export const fetchProgram = async (id: string): Promise<Program> => {
+  const fallback = createEmptyProgram(id);
+
+  try {
+    const response = await fetch(PROGRAMS_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        httpMethod: "GET",
+        pathParameters: {
+          program_id: id,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error ${response.status}`);
+    }
+
+    const payload = await readJsonResponse(response);
+    assertSuccessfulApiPayload(payload);
+
+    const program = parseProgramResponse(payload, fallback);
+    if (!isFallbackProgram(program, fallback)) {
+      return program;
+    }
   } catch {
-    const initial = clonePrograms(seedPrograms);
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
-    return initial;
-  }
-};
-
-export const savePrograms = (programs: Program[]) => {
-  if (typeof window === "undefined") {
-    return;
+    // If single-item GET is not available for programs, try the list endpoint below.
   }
 
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(programs));
+  const programs = await fetchPrograms();
+  return programs.find((program) => program.program_id === id) ?? fallback;
 };
 
-export const upsertProgram = (program: Program) => {
-  const programs = loadPrograms();
-  const index = programs.findIndex((item) => item.id === program.id);
-
-  if (index >= 0) {
-    programs[index] = program;
-  } else {
-    programs.unshift(program);
-  }
-
-  savePrograms(programs);
+export const updateProgram = async (program: Program): Promise<Program> => {
+  const payload = await postProgramMutationEvent(toProgramMutationEvent("PUT", program));
+  return payload ? parseProgramResponse(payload, program) : program;
 };
 
-export const removeProgram = (id: string) => {
-  const programs = loadPrograms().filter((program) => program.id !== id);
-  savePrograms(programs);
+export const createProgram = async (program: Program): Promise<Program> => {
+  const programToCreate = {
+    ...program,
+    program_id: program.program_id || generateGuid(),
+  };
+
+  const payload = await postProgramMutationEvent(toProgramMutationEvent("POST", programToCreate));
+  return payload ? parseProgramResponse(payload, programToCreate) : programToCreate;
 };
 
-export const createEmptySection = (index: number): ProgramSection => ({
-  id: `section-${Date.now()}-${index}`,
-  title: "",
-  text: "",
-  image: "",
+export const createEmptyProgramHero = (): ProgramHero => ({
+  image_url: "",
+  image_text: "",
 });
 
-export const createEmptyHeroSlide = (index: number): ProgramHeroSlide => ({
-  id: `hero-${Date.now()}-${index}`,
-  image: "",
-  caption: "YOU COULD BE NEXT!",
-  applyNowUrl: "",
+export const createEmptyProgramSection = (index: number): ProgramSection => ({
+  section_image: "",
+  section_title: "",
+  section_text: "",
+  section_order: String(index + 1),
 });
 
-export const createEmptyProgram = (): Program => ({
-  id: `program-${Date.now()}`,
-  title: "",
-  mainImage: "",
-  heroImages: [],
-  primaryHeroImageId: "",
-  mainText: "",
-  learnMoreUrl: "",
-  applyOnlineUrl: "",
-  enabled: 1,
-  sections: [createEmptySection(0)],
+export const createEmptyProgramPlayer = (): ProgramPlayer => ({
+  player_image: "",
+  player_says: "",
+  player_description: "",
 });
+
+export const createEmptyProgramDetail = (): ProgramDetail => ({
+  detail_title: "",
+  detail_text: "",
+  detail_file: "",
+});
+
+export const createEmptyProgramVariation = (): ProgramVariation => ({
+  variations_description: "",
+  variations_dates: "",
+  variations_cost: "",
+  variations_deadline: "",
+});
+
+export const createEmptyProgramAddon = (): ProgramAddon => ({
+  addons_title: "",
+  addons_description: "",
+  addons_cost: "",
+});
+
+export const createEmptyProgramInformation = (): ProgramInformation => ({
+  information_title: "",
+  information_image: "",
+  information_url: "",
+});
+
+export const createEmptyProgram = (id = generateGuid()): Program => ({
+  program_id: id,
+  program_hero: [createEmptyProgramHero()],
+  program_title: "",
+  program_description: "",
+  program_section: [createEmptyProgramSection(0)],
+  program_players: [],
+  program_details: [],
+  program_variations: [],
+  program_addons: [],
+  program_information: [],
+  program_category: "",
+  program_apply: "",
+  program_enabled: true,
+  program_status: "",
+  program_date: "",
+});
+
+export type { ProgramArrayKey };

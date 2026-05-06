@@ -44,6 +44,7 @@ export default function App() {
           >
             <Route path="home" element={<Home />} />
             <Route path="hero-list" element={<HeroList />} />
+            <Route path="heros/:id" element={<Hero />} />
             <Route path="hero/:id" element={<Hero />} />
             <Route path="programs-list" element={<ProgramsList />} />
             <Route path="programs/:id" element={<Program />} />

@@ -8,32 +8,45 @@ import Input from "../../../components/form/input/InputField";
 import TextArea from "../../../components/form/input/TextArea";
 import S3ImageManager from "../../../components/page/S3ImageManager";
 import Button from "../../../components/ui/button/Button";
-import { Modal } from "../../../components/ui/modal";
-import { useModal } from "../../../hooks/useModal";
+import { resolveS3ImageUrl } from "../../../utils/s3Image";
 import {
-  createEmptyHeroSlide,
   createEmptyProgram,
-  createEmptySection,
-  loadPrograms,
-  upsertProgram,
+  createEmptyProgramAddon,
+  createEmptyProgramDetail,
+  createEmptyProgramHero,
+  createEmptyProgramInformation,
+  createEmptyProgramPlayer,
+  createEmptyProgramSection,
+  createEmptyProgramVariation,
+  createProgram as createProgramRequest,
+  fetchProgram,
+  normalizeEnabled,
+  updateProgram as updateProgramRequest,
 } from "./programData";
-import type { Program, ProgramHeroSlide, ProgramSection } from "./programData";
+import type {
+  Program,
+  ProgramAddon,
+  ProgramDetail,
+  ProgramHero,
+  ProgramInformation,
+  ProgramPlayer,
+  ProgramSection,
+  ProgramVariation,
+} from "./programData";
 
-const getPreviewClasses = (index: number) =>
-  index % 2 === 0
-    ? "lg:grid-cols-[minmax(0,220px)_minmax(0,1fr)]"
-    : "lg:grid-cols-[minmax(0,1fr)_minmax(0,220px)]";
-const DEFAULT_HERO_CAPTION = "YOU COULD BE NEXT!";
+const removeAt = <T,>(items: T[], index: number): T[] =>
+  items.filter((_, itemIndex) => itemIndex !== index);
 
 export default function Program() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const { isOpen, openModal, closeModal } = useModal();
 
   const [program, setProgram] = useState<Program | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [heroImageDraft, setHeroImageDraft] = useState("");
-  const [carouselIndex, setCarouselIndex] = useState(0);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const decodedId = useMemo(() => {
     if (!id || id === "new") {
@@ -47,199 +60,197 @@ export default function Program() {
     }
   }, [id]);
 
-  useEffect(() => {
-    if (decodedId === "") {
-      setProgram(createEmptyProgram());
-      return;
-    }
-
-    if (decodedId === "new") {
-      setProgram(createEmptyProgram());
-      return;
-    }
-
-    const found = loadPrograms().find((item) => item.id === decodedId);
-    setProgram(found ?? createEmptyProgram());
-  }, [decodedId]);
-
-  const safeProgram = program ?? createEmptyProgram();
-  const validHeroSlides = useMemo(
-    () => safeProgram.heroImages.filter((slide) => slide.image.trim().length > 0),
-    [safeProgram.heroImages]
+  const emptyProgram = useMemo(
+    () => createEmptyProgram(decodedId === "new" || decodedId === "" ? undefined : decodedId),
+    [decodedId]
   );
-  const primaryHeroSlide =
-    validHeroSlides.find((slide) => slide.id === safeProgram.primaryHeroImageId) ??
-    validHeroSlides[0];
-  const primaryHeroIndex = primaryHeroSlide
-    ? Math.max(
-        0,
-        validHeroSlides.findIndex((slide) => slide.id === primaryHeroSlide.id)
-      )
-    : 0;
-  const activeHeroSlide = validHeroSlides[carouselIndex] ?? primaryHeroSlide;
 
-  const normalizeProgramImages = (nextProgram: Program): Program => {
-    const normalizedSlides = nextProgram.heroImages.reduce<ProgramHeroSlide[]>(
-      (acc, slide, index) => {
-        const id = String(slide.id || `hero-${Date.now()}-${index}`);
-        if (acc.some((item) => item.id === id)) {
-          return acc;
+  useEffect(() => {
+    if (decodedId === "" || decodedId === "new") {
+      setProgram(createEmptyProgram());
+      setLoadError(decodedId === "" ? "Id invalido en la URL." : null);
+      setLoading(false);
+      return;
+    }
+
+    let isCurrent = true;
+
+    const loadProgram = async () => {
+      setLoading(true);
+      setLoadError(null);
+
+      try {
+        const found = await fetchProgram(decodedId);
+
+        if (!isCurrent) {
+          return;
         }
 
-        acc.push({
-          id,
-          image: String(slide.image ?? "").trim(),
-          caption: String(slide.caption ?? DEFAULT_HERO_CAPTION).trim() || DEFAULT_HERO_CAPTION,
-          applyNowUrl: String(slide.applyNowUrl ?? "").trim(),
-        });
-        return acc;
-      },
-      []
-    );
-    const slidesWithImage = normalizedSlides.filter((slide) => slide.image.length > 0);
-    const primarySlide =
-      slidesWithImage.find((slide) => slide.id === nextProgram.primaryHeroImageId) ??
-      slidesWithImage[0];
+        setProgram(found);
+      } catch {
+        if (!isCurrent) {
+          return;
+        }
 
-    return {
-      ...nextProgram,
-      heroImages: normalizedSlides,
-      primaryHeroImageId: primarySlide?.id ?? normalizedSlides[0]?.id ?? "",
-      mainImage: primarySlide?.image ?? "",
+        setProgram(createEmptyProgram(decodedId));
+        setLoadError("No se pudo cargar el programa del API.");
+      } finally {
+        if (isCurrent) {
+          setLoading(false);
+        }
+      }
     };
-  };
+
+    void loadProgram();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [decodedId]);
+
+  const safeProgram = program ?? emptyProgram;
 
   const updateProgram = (patch: Partial<Program>) => {
-    setProgram(normalizeProgramImages({ ...safeProgram, ...patch }));
+    setProgram({ ...safeProgram, ...patch });
     setSaveMessage(null);
+    setSaveError(null);
   };
 
-  const addHeroImage = (imageUrl: string, setAsPrimary = false) => {
-    const trimmed = imageUrl.trim();
-    if (!trimmed) {
-      return;
-    }
+  const onSave = async () => {
+    setIsSaving(true);
+    setSaveMessage(null);
+    setSaveError(null);
 
-    const alreadyExists = safeProgram.heroImages.some((slide) => slide.image === trimmed);
-    if (alreadyExists) {
-      return;
-    }
+    try {
+      const isNewProgram = decodedId === "new";
+      const programToSave = isNewProgram
+        ? safeProgram
+        : { ...safeProgram, program_id: decodedId };
+      const savedProgram = isNewProgram
+        ? await createProgramRequest(programToSave)
+        : await updateProgramRequest(programToSave);
 
-    const newSlide: ProgramHeroSlide = {
-      ...createEmptyHeroSlide(safeProgram.heroImages.length),
-      image: trimmed,
-      caption: DEFAULT_HERO_CAPTION,
-      applyNowUrl: safeProgram.applyOnlineUrl,
-    };
+      setProgram(savedProgram);
+      setSaveMessage(
+        isNewProgram
+          ? "Programa creado correctamente."
+          : "Programa actualizado correctamente."
+      );
 
-    updateProgram({
-      heroImages: [...safeProgram.heroImages, newSlide],
-      primaryHeroImageId:
-        setAsPrimary || !primaryHeroSlide ? newSlide.id : safeProgram.primaryHeroImageId,
-    });
-    setHeroImageDraft("");
-  };
-
-  const updateHeroSlide = (slideId: string, patch: Partial<ProgramHeroSlide>) => {
-    updateProgram({
-      heroImages: safeProgram.heroImages.map((slide) =>
-        slide.id === slideId ? { ...slide, ...patch } : slide
-      ),
-    });
-  };
-
-  const removeHeroImage = (slideId: string) => {
-    const nextSlides = safeProgram.heroImages.filter((slide) => slide.id !== slideId);
-    const nextPrimary =
-      safeProgram.primaryHeroImageId === slideId
-        ? nextSlides.find((slide) => slide.image.trim())?.id ?? nextSlides[0]?.id ?? ""
-        : safeProgram.primaryHeroImageId;
-
-    updateProgram({
-      heroImages: nextSlides,
-      primaryHeroImageId: nextPrimary,
-    });
-  };
-
-  const setPrimaryHeroImage = (slideId: string) => {
-    updateProgram({ primaryHeroImageId: slideId });
-  };
-
-  const updateSection = (
-    sectionId: string,
-    patch: Partial<ProgramSection>
-  ) => {
-    updateProgram({
-      sections: safeProgram.sections.map((section) =>
-        section.id === sectionId ? { ...section, ...patch } : section
-      ),
-    });
-  };
-
-  const addSection = () => {
-    updateProgram({
-      sections: [
-        ...safeProgram.sections,
-        createEmptySection(safeProgram.sections.length),
-      ],
-    });
-  };
-
-  const removeSection = (sectionId: string) => {
-    updateProgram({
-      sections: safeProgram.sections.filter((section) => section.id !== sectionId),
-    });
-  };
-
-  const onSave = () => {
-    upsertProgram(normalizeProgramImages(safeProgram));
-    setSaveMessage("Programa guardado localmente.");
-
-    if (decodedId === "new") {
-      navigate(`/programs/${btoa(safeProgram.id)}`, { replace: true });
-    }
-  };
-
-  useEffect(() => {
-    setCarouselIndex((current) => {
-      if (validHeroSlides.length === 0) {
-        return 0;
+      if (isNewProgram) {
+        navigate(`/programs/${btoa(savedProgram.program_id)}`, { replace: true });
       }
+    } catch (error) {
+      const apiError = error instanceof Error ? ` ${error.message}` : "";
+      setSaveError(
+        decodedId === "new"
+          ? `No se pudo crear el programa en el API.${apiError}`
+          : `No se pudo actualizar el programa en el API.${apiError}`
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
-      return Math.min(current, validHeroSlides.length - 1);
+  const updateHero = (index: number, patch: Partial<ProgramHero>) => {
+    updateProgram({
+      program_hero: safeProgram.program_hero.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, ...patch } : item
+      ),
     });
-  }, [validHeroSlides.length]);
+  };
 
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
+  const updateSection = (index: number, patch: Partial<ProgramSection>) => {
+    updateProgram({
+      program_section: safeProgram.program_section.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, ...patch } : item
+      ),
+    });
+  };
 
-    setCarouselIndex(primaryHeroIndex);
-  }, [isOpen, primaryHeroIndex]);
+  const updatePlayer = (index: number, patch: Partial<ProgramPlayer>) => {
+    updateProgram({
+      program_players: safeProgram.program_players.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, ...patch } : item
+      ),
+    });
+  };
 
-  useEffect(() => {
-    if (!isOpen || validHeroSlides.length <= 1) {
-      return;
-    }
+  const updateDetail = (index: number, patch: Partial<ProgramDetail>) => {
+    updateProgram({
+      program_details: safeProgram.program_details.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, ...patch } : item
+      ),
+    });
+  };
 
-    const timer = window.setInterval(() => {
-      setCarouselIndex((current) => (current + 1) % validHeroSlides.length);
-    }, 4000);
+  const updateVariation = (index: number, patch: Partial<ProgramVariation>) => {
+    updateProgram({
+      program_variations: safeProgram.program_variations.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, ...patch } : item
+      ),
+    });
+  };
 
-    return () => window.clearInterval(timer);
-  }, [validHeroSlides.length, isOpen]);
+  const updateAddon = (index: number, patch: Partial<ProgramAddon>) => {
+    updateProgram({
+      program_addons: safeProgram.program_addons.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, ...patch } : item
+      ),
+    });
+  };
+
+  const updateInformation = (index: number, patch: Partial<ProgramInformation>) => {
+    updateProgram({
+      program_information: safeProgram.program_information.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, ...patch } : item
+      ),
+    });
+  };
+
+  const renderImageField = (
+    idPrefix: string,
+    value: string,
+    onChange: (url: string) => void
+  ) => {
+    const previewUrl = resolveS3ImageUrl(value);
+
+    return (
+      <div className="space-y-3">
+        <div>
+          <Label htmlFor={`${idPrefix}-image`}>Image URL</Label>
+          <Input
+            id={`${idPrefix}-image`}
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            placeholder="https://.../image.jpg"
+          />
+        </div>
+        {previewUrl && (
+          <div className="h-36 overflow-hidden rounded-xl border border-gray-200 bg-gray-100 dark:border-white/[0.08] dark:bg-gray-900">
+            <img
+              src={previewUrl}
+              alt="Preview"
+              className="h-full w-full object-cover"
+              onError={(event) => {
+                event.currentTarget.src = "/images/logo/ifx-logo.png";
+              }}
+            />
+          </div>
+        )}
+        <S3ImageManager selectedUrl={value} onSelect={onChange} />
+      </div>
+    );
+  };
 
   return (
     <>
       <PageMeta title="Program" description="Program editor" />
-      <PageBreadcrumb
-        pageTitle={decodedId === "new" ? "New Program" : "Program Detail"}
-      />
+      <PageBreadcrumb pageTitle={decodedId === "new" ? "New Program" : "Program Detail"} />
       <div className="space-y-6">
         <ComponentCard
           title={decodedId === "new" ? "New Program" : "Program"}
-          desc="Front provisional con persistencia local mientras el API queda listo."
+          desc="Carga de programa con estructuras dinamicas segun el API."
         >
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -248,18 +259,34 @@ export default function Program() {
                   {saveMessage}
                 </p>
               )}
+              {saveError && (
+                <p className="text-sm text-error-600 dark:text-error-400">
+                  {saveError}
+                </p>
+              )}
+              {loading && (
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Cargando programa...
+                </p>
+              )}
+              {loadError && (
+                <p className="text-sm text-error-600 dark:text-error-400">
+                  {loadError}
+                </p>
+              )}
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={openModal}>
-                Preview Program
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => navigate("/programs-list")}
-              >
+              <Button variant="outline" onClick={() => navigate("/programs-list")}>
                 Back to List
               </Button>
-              <Button onClick={onSave}>Save Program</Button>
+              <Button
+                onClick={() => {
+                  void onSave();
+                }}
+                disabled={loading || isSaving}
+              >
+                {isSaving ? "Saving..." : "Save Program"}
+              </Button>
             </div>
           </div>
 
@@ -274,13 +301,18 @@ export default function Program() {
             </div>
 
             <div className="space-y-6">
+              <div>
+                <Label htmlFor="program-id">Id</Label>
+                <Input id="program-id" value={safeProgram.program_id} disabled />
+              </div>
+
               <div className="grid gap-6 lg:grid-cols-2">
                 <div>
                   <Label htmlFor="program-title">Titulo</Label>
                   <Input
                     id="program-title"
-                    value={safeProgram.title}
-                    onChange={(e) => updateProgram({ title: e.target.value })}
+                    value={safeProgram.program_title}
+                    onChange={(event) => updateProgram({ program_title: event.target.value })}
                     placeholder="Nombre del programa"
                   />
                 </div>
@@ -288,14 +320,14 @@ export default function Program() {
                   <Label>Status</Label>
                   <div className="flex gap-2">
                     <Button
-                      variant={safeProgram.enabled === 1 ? "primary" : "outline"}
-                      onClick={() => updateProgram({ enabled: 1 })}
+                      variant={normalizeEnabled(safeProgram.program_enabled) === 1 ? "primary" : "outline"}
+                      onClick={() => updateProgram({ program_enabled: true })}
                     >
                       Enabled
                     </Button>
                     <Button
-                      variant={safeProgram.enabled === 0 ? "primary" : "outline"}
-                      onClick={() => updateProgram({ enabled: 0 })}
+                      variant={normalizeEnabled(safeProgram.program_enabled) === 0 ? "primary" : "outline"}
+                      onClick={() => updateProgram({ program_enabled: false })}
                     >
                       Disabled
                     </Button>
@@ -303,143 +335,54 @@ export default function Program() {
                 </div>
               </div>
 
-              <div className="space-y-4 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900/60">
-                <div className="flex items-center justify-between gap-3">
-                  <Label>Imagenes Hero (Carrusel)</Label>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Selecciona una imagen principal para portada.
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap items-end gap-3">
-                  <div className="min-w-[260px] flex-1">
-                    <Label htmlFor="hero-image-draft">Agregar URL</Label>
-                    <Input
-                      id="hero-image-draft"
-                      value={heroImageDraft}
-                      onChange={(e) => setHeroImageDraft(e.target.value)}
-                      placeholder="https://..."
-                    />
-                  </div>
-                  <Button
-                    onClick={() => addHeroImage(heroImageDraft, validHeroSlides.length === 0)}
-                  >
-                    Add Image
-                  </Button>
-                </div>
-
-                <div>
-                  <Label>Biblioteca S3 Hero</Label>
-                  <S3ImageManager
-                    selectedUrl={primaryHeroSlide?.image ?? ""}
-                    onSelect={(url) => addHeroImage(url, validHeroSlides.length === 0)}
-                  />
-                </div>
-
-                <div className="space-y-3">
-                  {safeProgram.heroImages.length === 0 ? (
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      Aun no hay imagenes en el carrusel.
-                    </p>
-                  ) : (
-                    safeProgram.heroImages.map((slide, index) => (
-                      <div
-                        key={slide.id}
-                        className="rounded-xl border border-gray-200 p-3 dark:border-gray-800"
-                      >
-                        <div className="grid gap-3 lg:grid-cols-[110px_minmax(0,1fr)]">
-                          <div className="h-20 w-full overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800">
-                            {slide.image ? (
-                              <img
-                                src={slide.image}
-                                alt={`Hero ${index + 1}`}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <div className="flex h-full items-center justify-center text-xs text-gray-500">
-                                Sin imagen
-                              </div>
-                            )}
-                          </div>
-                          <div className="grid gap-3">
-                            <Input
-                              value={slide.image}
-                              onChange={(e) =>
-                                updateHeroSlide(slide.id, { image: e.target.value })
-                              }
-                              placeholder="Image URL https://..."
-                            />
-                            <Input
-                              value={slide.caption}
-                              onChange={(e) =>
-                                updateHeroSlide(slide.id, { caption: e.target.value })
-                              }
-                              placeholder="Texto overlay (ej: YOU COULD BE NEXT!)"
-                            />
-                            <Input
-                              value={slide.applyNowUrl}
-                              onChange={(e) =>
-                                updateHeroSlide(slide.id, { applyNowUrl: e.target.value })
-                              }
-                              placeholder="Apply Now URL https://..."
-                            />
-                            <div className="flex flex-wrap gap-2">
-                              <Button
-                                variant={
-                                  safeProgram.primaryHeroImageId === slide.id
-                                    ? "primary"
-                                    : "outline"
-                                }
-                                size="sm"
-                                onClick={() => setPrimaryHeroImage(slide.id)}
-                              >
-                                {safeProgram.primaryHeroImageId === slide.id
-                                  ? "Principal"
-                                  : "Set Principal"}
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => removeHeroImage(slide.id)}
-                              >
-                                Delete
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
               <div>
-                <Label>Texto Principal</Label>
+                <Label htmlFor="program-description">Descripcion</Label>
                 <TextArea
                   rows={5}
-                  value={safeProgram.mainText}
-                  onChange={(value) => updateProgram({ mainText: value })}
+                  value={safeProgram.program_description}
+                  onChange={(value) => updateProgram({ program_description: value })}
                   placeholder="Descripcion principal del programa"
                 />
               </div>
 
               <div className="grid gap-6 lg:grid-cols-2">
                 <div>
-                  <Label htmlFor="learn-more-url">Learn More URL</Label>
+                  <Label htmlFor="program-category">Categoria</Label>
                   <Input
-                    id="learn-more-url"
-                    value={safeProgram.learnMoreUrl}
-                    onChange={(e) => updateProgram({ learnMoreUrl: e.target.value })}
+                    id="program-category"
+                    value={safeProgram.program_category}
+                    onChange={(event) => updateProgram({ program_category: event.target.value })}
+                    placeholder="Categoria"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="program-status">Program Status</Label>
+                  <Input
+                    id="program-status"
+                    value={safeProgram.program_status}
+                    onChange={(event) => updateProgram({ program_status: event.target.value })}
+                    placeholder="Status"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-6 lg:grid-cols-2">
+                <div>
+                  <Label htmlFor="program-apply">Apply URL</Label>
+                  <Input
+                    id="program-apply"
+                    value={safeProgram.program_apply}
+                    onChange={(event) => updateProgram({ program_apply: event.target.value })}
                     placeholder="https://..."
                   />
                 </div>
                 <div>
-                  <Label htmlFor="apply-online-url">Apply Online URL</Label>
+                  <Label htmlFor="program-date">Fecha de Publicacion</Label>
                   <Input
-                    id="apply-online-url"
-                    value={safeProgram.applyOnlineUrl}
-                    onChange={(e) => updateProgram({ applyOnlineUrl: e.target.value })}
-                    placeholder="https://..."
+                    id="program-date"
+                    type="date"
+                    value={safeProgram.program_date}
+                    onChange={(event) => updateProgram({ program_date: event.target.value })}
                   />
                 </div>
               </div>
@@ -447,312 +390,561 @@ export default function Program() {
           </div>
         </ComponentCard>
 
-        <ComponentCard
-          title="Sections Builder"
-          desc="Cada seccion alterna automaticamente la disposicion entre imagen-izquierda y imagen-derecha."
-        >
-          <div className="rounded-2xl border-2 border-[#3558a8] bg-[#f5f8ff] p-4 dark:border-[#4f6cb2] dark:bg-[#101a33]">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-[#234487] dark:text-[#9fb5e8]">
-                Sections Area
-              </h3>
-              <span className="rounded-md bg-[#dce6fb] px-2 py-1 text-xs font-semibold text-[#234487] dark:bg-[#1a2b54] dark:text-[#b6c7ef]">
-                Sections
-              </span>
-            </div>
-            <div className="mb-4 flex justify-end">
-              <Button onClick={addSection}>Add Section</Button>
+        <ComponentCard title="Program Hero" desc="Carrusel principal del programa.">
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <Button
+                onClick={() =>
+                  updateProgram({
+                    program_hero: [...safeProgram.program_hero, createEmptyProgramHero()],
+                  })
+                }
+              >
+                Add Hero
+              </Button>
             </div>
 
-            {safeProgram.sections.map((section, index) => {
-              const imageFirst = index % 2 === 0;
+            {safeProgram.program_hero.length === 0 && (
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Aun no hay imagenes hero.
+              </p>
+            )}
 
-              return (
-                <div
-                  key={section.id}
-                  className="mb-4 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900/60"
-                >
-                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">
-                        Section {index + 1}
-                      </h4>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {imageFirst
-                          ? "Layout: imagen izquierda, titulo y texto a la derecha."
-                          : "Layout: titulo y texto a la izquierda, imagen a la derecha."}
-                      </p>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => removeSection(section.id)}
-                      disabled={safeProgram.sections.length === 1}
-                    >
-                      Delete Section
-                    </Button>
+            {safeProgram.program_hero.map((item, index) => (
+              <div
+                key={`hero-${index}`}
+                className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900/60"
+              >
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                    Hero {index + 1}
+                  </h4>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      updateProgram({ program_hero: removeAt(safeProgram.program_hero, index) })
+                    }
+                  >
+                    Delete
+                  </Button>
+                </div>
+                <div className="grid gap-6 lg:grid-cols-2">
+                  {renderImageField(`program-hero-${index}`, item.image_url, (url) =>
+                    updateHero(index, { image_url: url })
+                  )}
+                  <div>
+                    <Label htmlFor={`program-hero-text-${index}`}>Image Text</Label>
+                    <TextArea
+                      rows={4}
+                      value={item.image_text}
+                      onChange={(value) => updateHero(index, { image_text: value })}
+                      placeholder="Texto sobre la imagen"
+                    />
                   </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </ComponentCard>
 
-                  <div className="grid gap-4 lg:grid-cols-2">
+        <ComponentCard title="Program Sections" desc="Bloques de contenido del programa.">
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <Button
+                onClick={() =>
+                  updateProgram({
+                    program_section: [
+                      ...safeProgram.program_section,
+                      createEmptyProgramSection(safeProgram.program_section.length),
+                    ],
+                  })
+                }
+              >
+                Add Section
+              </Button>
+            </div>
+
+            {safeProgram.program_section.map((item, index) => (
+              <div
+                key={`section-${index}`}
+                className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900/60"
+              >
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                    Section {index + 1}
+                  </h4>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      updateProgram({
+                        program_section: removeAt(safeProgram.program_section, index),
+                      })
+                    }
+                  >
+                    Delete
+                  </Button>
+                </div>
+                <div className="grid gap-6 lg:grid-cols-2">
+                  {renderImageField(`program-section-${index}`, item.section_image, (url) =>
+                    updateSection(index, { section_image: url })
+                  )}
+                  <div className="space-y-4">
                     <div>
-                      <Label htmlFor={`section-title-${section.id}`}>Titulo</Label>
+                      <Label htmlFor={`program-section-title-${index}`}>Section Title</Label>
                       <Input
-                        id={`section-title-${section.id}`}
-                        value={section.title}
-                        onChange={(e) =>
-                          updateSection(section.id, { title: e.target.value })
+                        id={`program-section-title-${index}`}
+                        value={item.section_title}
+                        onChange={(event) =>
+                          updateSection(index, { section_title: event.target.value })
                         }
                         placeholder="Titulo de la seccion"
                       />
                     </div>
                     <div>
-                      <Label htmlFor={`section-image-${section.id}`}>Imagen</Label>
+                      <Label htmlFor={`program-section-order-${index}`}>Section Order</Label>
                       <Input
-                        id={`section-image-${section.id}`}
-                        value={section.image}
-                        onChange={(e) =>
-                          updateSection(section.id, { image: e.target.value })
+                        id={`program-section-order-${index}`}
+                        value={item.section_order}
+                        onChange={(event) =>
+                          updateSection(index, { section_order: event.target.value })
+                        }
+                        placeholder="Orden"
+                      />
+                    </div>
+                    <div>
+                      <Label>Section Text</Label>
+                      <TextArea
+                        rows={5}
+                        value={item.section_text}
+                        onChange={(value) => updateSection(index, { section_text: value })}
+                        placeholder="Contenido de la seccion"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </ComponentCard>
+
+        <ComponentCard title="Program Players" desc="Testimonios o jugadores asociados.">
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <Button
+                onClick={() =>
+                  updateProgram({
+                    program_players: [
+                      ...safeProgram.program_players,
+                      createEmptyProgramPlayer(),
+                    ],
+                  })
+                }
+              >
+                Add Player
+              </Button>
+            </div>
+
+            {safeProgram.program_players.length === 0 && (
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Aun no hay players.
+              </p>
+            )}
+
+            {safeProgram.program_players.map((item, index) => (
+              <div
+                key={`player-${index}`}
+                className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900/60"
+              >
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                    Player {index + 1}
+                  </h4>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      updateProgram({
+                        program_players: removeAt(safeProgram.program_players, index),
+                      })
+                    }
+                  >
+                    Delete
+                  </Button>
+                </div>
+                <div className="grid gap-6 lg:grid-cols-2">
+                  {renderImageField(`program-player-${index}`, item.player_image, (url) =>
+                    updatePlayer(index, { player_image: url })
+                  )}
+                  <div className="space-y-4">
+                    <div>
+                      <Label>Player Says</Label>
+                      <TextArea
+                        rows={4}
+                        value={item.player_says}
+                        onChange={(value) => updatePlayer(index, { player_says: value })}
+                        placeholder="Testimonio"
+                      />
+                    </div>
+                    <div>
+                      <Label>Player Description</Label>
+                      <TextArea
+                        rows={5}
+                        value={item.player_description}
+                        onChange={(value) =>
+                          updatePlayer(index, { player_description: value })
+                        }
+                        placeholder="Descripcion"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </ComponentCard>
+
+        <ComponentCard title="Program Details" desc="Detalles adicionales y archivos.">
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <Button
+                onClick={() =>
+                  updateProgram({
+                    program_details: [
+                      ...safeProgram.program_details,
+                      createEmptyProgramDetail(),
+                    ],
+                  })
+                }
+              >
+                Add Detail
+              </Button>
+            </div>
+
+            {safeProgram.program_details.length === 0 && (
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Aun no hay details.
+              </p>
+            )}
+
+            {safeProgram.program_details.map((item, index) => (
+              <div
+                key={`detail-${index}`}
+                className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900/60"
+              >
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                    Detail {index + 1}
+                  </h4>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      updateProgram({
+                        program_details: removeAt(safeProgram.program_details, index),
+                      })
+                    }
+                  >
+                    Delete
+                  </Button>
+                </div>
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div>
+                    <Label htmlFor={`program-detail-title-${index}`}>Detail Title</Label>
+                    <Input
+                      id={`program-detail-title-${index}`}
+                      value={item.detail_title}
+                      onChange={(event) =>
+                        updateDetail(index, { detail_title: event.target.value })
+                      }
+                      placeholder="Titulo"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor={`program-detail-file-${index}`}>Detail File</Label>
+                    <Input
+                      id={`program-detail-file-${index}`}
+                      value={item.detail_file}
+                      onChange={(event) =>
+                        updateDetail(index, { detail_file: event.target.value })
+                      }
+                      placeholder="https://.../file.pdf"
+                    />
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <Label>Detail Text</Label>
+                  <TextArea
+                    rows={5}
+                    value={item.detail_text}
+                    onChange={(value) => updateDetail(index, { detail_text: value })}
+                    placeholder="Texto del detalle"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </ComponentCard>
+
+        <ComponentCard title="Program Variations" desc="Fechas, costos y deadlines.">
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <Button
+                onClick={() =>
+                  updateProgram({
+                    program_variations: [
+                      ...safeProgram.program_variations,
+                      createEmptyProgramVariation(),
+                    ],
+                  })
+                }
+              >
+                Add Variation
+              </Button>
+            </div>
+
+            {safeProgram.program_variations.length === 0 && (
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Aun no hay variations.
+              </p>
+            )}
+
+            {safeProgram.program_variations.map((item, index) => (
+              <div
+                key={`variation-${index}`}
+                className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900/60"
+              >
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                    Variation {index + 1}
+                  </h4>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      updateProgram({
+                        program_variations: removeAt(safeProgram.program_variations, index),
+                      })
+                    }
+                  >
+                    Delete
+                  </Button>
+                </div>
+                <div>
+                  <Label>Variations Description</Label>
+                  <TextArea
+                    rows={4}
+                    value={item.variations_description}
+                    onChange={(value) =>
+                      updateVariation(index, { variations_description: value })
+                    }
+                    placeholder="Descripcion"
+                  />
+                </div>
+                <div className="mt-4 grid gap-4 lg:grid-cols-3">
+                  <div>
+                    <Label htmlFor={`program-variation-dates-${index}`}>Dates</Label>
+                    <Input
+                      id={`program-variation-dates-${index}`}
+                      value={item.variations_dates}
+                      onChange={(event) =>
+                        updateVariation(index, { variations_dates: event.target.value })
+                      }
+                      placeholder="Fechas"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor={`program-variation-cost-${index}`}>Cost</Label>
+                    <Input
+                      id={`program-variation-cost-${index}`}
+                      value={item.variations_cost}
+                      onChange={(event) =>
+                        updateVariation(index, { variations_cost: event.target.value })
+                      }
+                      placeholder="Costo"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor={`program-variation-deadline-${index}`}>Deadline</Label>
+                    <Input
+                      id={`program-variation-deadline-${index}`}
+                      value={item.variations_deadline}
+                      onChange={(event) =>
+                        updateVariation(index, { variations_deadline: event.target.value })
+                      }
+                      placeholder="Deadline"
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </ComponentCard>
+
+        <ComponentCard title="Program Addons" desc="Opcionales adicionales del programa.">
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <Button
+                onClick={() =>
+                  updateProgram({
+                    program_addons: [...safeProgram.program_addons, createEmptyProgramAddon()],
+                  })
+                }
+              >
+                Add Addon
+              </Button>
+            </div>
+
+            {safeProgram.program_addons.length === 0 && (
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Aun no hay addons.
+              </p>
+            )}
+
+            {safeProgram.program_addons.map((item, index) => (
+              <div
+                key={`addon-${index}`}
+                className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900/60"
+              >
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                    Addon {index + 1}
+                  </h4>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      updateProgram({
+                        program_addons: removeAt(safeProgram.program_addons, index),
+                      })
+                    }
+                  >
+                    Delete
+                  </Button>
+                </div>
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div>
+                    <Label htmlFor={`program-addon-title-${index}`}>Addon Title</Label>
+                    <Input
+                      id={`program-addon-title-${index}`}
+                      value={item.addons_title}
+                      onChange={(event) =>
+                        updateAddon(index, { addons_title: event.target.value })
+                      }
+                      placeholder="Titulo"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor={`program-addon-cost-${index}`}>Addon Cost</Label>
+                    <Input
+                      id={`program-addon-cost-${index}`}
+                      value={item.addons_cost}
+                      onChange={(event) =>
+                        updateAddon(index, { addons_cost: event.target.value })
+                      }
+                      placeholder="Costo"
+                    />
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <Label>Addon Description</Label>
+                  <TextArea
+                    rows={4}
+                    value={item.addons_description}
+                    onChange={(value) => updateAddon(index, { addons_description: value })}
+                    placeholder="Descripcion"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </ComponentCard>
+
+        <ComponentCard title="Program Information" desc="Links informativos relacionados.">
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <Button
+                onClick={() =>
+                  updateProgram({
+                    program_information: [
+                      ...safeProgram.program_information,
+                      createEmptyProgramInformation(),
+                    ],
+                  })
+                }
+              >
+                Add Information
+              </Button>
+            </div>
+
+            {safeProgram.program_information.length === 0 && (
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Aun no hay information.
+              </p>
+            )}
+
+            {safeProgram.program_information.map((item, index) => (
+              <div
+                key={`information-${index}`}
+                className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900/60"
+              >
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                    Information {index + 1}
+                  </h4>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      updateProgram({
+                        program_information: removeAt(safeProgram.program_information, index),
+                      })
+                    }
+                  >
+                    Delete
+                  </Button>
+                </div>
+                <div className="grid gap-6 lg:grid-cols-2">
+                  {renderImageField(
+                    `program-information-${index}`,
+                    item.information_image,
+                    (url) => updateInformation(index, { information_image: url })
+                  )}
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor={`program-information-title-${index}`}>
+                        Information Title
+                      </Label>
+                      <Input
+                        id={`program-information-title-${index}`}
+                        value={item.information_title}
+                        onChange={(event) =>
+                          updateInformation(index, {
+                            information_title: event.target.value,
+                          })
+                        }
+                        placeholder="Titulo"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor={`program-information-url-${index}`}>Information URL</Label>
+                      <Input
+                        id={`program-information-url-${index}`}
+                        value={item.information_url}
+                        onChange={(event) =>
+                          updateInformation(index, { information_url: event.target.value })
                         }
                         placeholder="https://..."
                       />
                     </div>
                   </div>
-
-                  <div>
-                    <Label>Texto</Label>
-                    <TextArea
-                      rows={4}
-                      value={section.text}
-                      onChange={(value) => updateSection(section.id, { text: value })}
-                      placeholder="Contenido de la seccion"
-                    />
-                  </div>
-
-                  <div>
-                    <Label>Biblioteca S3 Seccion</Label>
-                    <S3ImageManager
-                      selectedUrl={section.image}
-                      onSelect={(url) => updateSection(section.id, { image: url })}
-                    />
-                  </div>
-
-                  <div className="rounded-2xl bg-gray-50 p-4 dark:bg-white/[0.03]">
-                    <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                      Preview
-                    </p>
-                    <div className={`grid gap-4 ${getPreviewClasses(index)}`}>
-                      <div className={imageFirst ? "order-1" : "order-2"}>
-                        <div className="h-48 overflow-hidden rounded-2xl bg-gray-200 dark:bg-gray-800">
-                          {section.image ? (
-                            <img
-                              src={section.image}
-                              alt={section.title || `Section ${index + 1}`}
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-full items-center justify-center text-sm text-gray-400">
-                              Imagen de la seccion
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className={imageFirst ? "order-2" : "order-1"}>
-                        <h5 className="text-lg font-semibold text-gray-800 dark:text-white/90">
-                          {section.title || "Titulo de la seccion"}
-                        </h5>
-                        <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">
-                          {section.text || "El texto de la seccion aparecera aqui."}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         </ComponentCard>
       </div>
-
-      <Modal isOpen={isOpen} onClose={closeModal} className="mx-4 max-w-7xl p-0">
-        <div className="max-h-[88vh] overflow-y-auto bg-[#e3e3e3] p-3 sm:p-5">
-          <div className="mx-auto w-full max-w-[1100px] overflow-hidden rounded-[22px] bg-white text-[#1e1e1e]">
-            <header className="bg-[#efefef]">
-              <h1 className="px-4 py-3 text-center text-[20px] font-semibold text-[#153a84] sm:text-[34px]">
-                {safeProgram.title || "Program Title"}
-              </h1>
-            </header>
-
-            <section className="relative h-[300px] overflow-hidden sm:h-[480px]">
-              {activeHeroSlide ? (
-                <img
-                  src={activeHeroSlide.image}
-                  alt={safeProgram.title || "Program"}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <div className="flex h-full items-center justify-center bg-[#cfcfcf] text-sm text-gray-600">
-                  Imagen principal del programa
-                </div>
-              )}
-              <div className="absolute inset-0 bg-black/10" />
-              {activeHeroSlide && (
-                <a
-                  href={activeHeroSlide.applyNowUrl || safeProgram.applyOnlineUrl || "#"}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="absolute right-4 top-6 inline-flex min-h-[64px] min-w-[220px] items-center justify-center rounded-[8px] bg-[#49549a] px-6 py-3 text-[24px] font-semibold uppercase tracking-[0.01em] text-white transition hover:bg-[#3f4a8a] sm:right-8 sm:top-24"
-                >
-                  Apply Now
-                </a>
-              )}
-              <div className="absolute bottom-8 left-1/2 w-[92%] -translate-x-1/2 px-3 sm:bottom-14 sm:w-auto">
-                <span className="inline-block bg-black/65 px-5 py-2 text-center text-[44px] font-medium uppercase leading-none tracking-tight text-white sm:text-[82px]">
-                  {activeHeroSlide?.caption || DEFAULT_HERO_CAPTION}
-                </span>
-              </div>
-              <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 gap-1.5">
-                {validHeroSlides.map((slide, index) => (
-                  <button
-                    key={slide.id}
-                    type="button"
-                    onClick={() => setCarouselIndex(index)}
-                    className={`h-2.5 w-2.5 rounded-full transition ${
-                      index === carouselIndex ? "bg-white" : "bg-white/55"
-                    }`}
-                  />
-                ))}
-              </div>
-              {validHeroSlides.length > 1 && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setCarouselIndex((current) =>
-                        current === 0 ? validHeroSlides.length - 1 : current - 1
-                      )
-                    }
-                    className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-[#3f4c90]/80 px-4 py-2 text-3xl leading-none text-white transition hover:bg-[#37447f] sm:left-8"
-                  >
-                    {"<"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setCarouselIndex((current) => (current + 1) % validHeroSlides.length)
-                    }
-                    className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-[#3f4c90]/80 px-4 py-2 text-3xl leading-none text-white transition hover:bg-[#37447f] sm:right-8"
-                  >
-                    {">"}
-                  </button>
-                </>
-              )}
-            </section>
-
-            <section className="space-y-8 bg-white px-6 py-10 sm:px-10">
-              <h2 className="text-[26px] font-semibold leading-tight text-[#1e3f8f] sm:text-[39px]">
-                {safeProgram.title
-                  ? `${safeProgram.title} - Program Overview`
-                  : "Program Overview"}
-              </h2>
-
-              {(safeProgram.mainText || "El texto principal del programa aparecera aqui.")
-                .split(/\n+/)
-                .filter((block) => block.trim().length > 0)
-                .map((block, index) => (
-                  <p key={index} className="text-[18px] leading-7 text-[#2a2a2a]">
-                    {block}
-                  </p>
-                ))}
-
-              {(safeProgram.learnMoreUrl || safeProgram.applyOnlineUrl) && (
-                <div className="flex flex-wrap items-center gap-4 pt-3">
-                  {safeProgram.learnMoreUrl && (
-                    <a
-                      href={safeProgram.learnMoreUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex min-h-[48px] min-w-[220px] items-center justify-center rounded-[8px] border border-[#b9b089] bg-transparent px-7 py-3 text-[18px] font-medium uppercase tracking-[0.02em] text-[#817848] transition hover:bg-[#f1eedf]"
-                    >
-                      Learn More
-                    </a>
-                  )}
-                  {safeProgram.applyOnlineUrl && (
-                    <a
-                      href={safeProgram.applyOnlineUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex min-h-[48px] min-w-[260px] items-center justify-center rounded-[8px] bg-[#2e3a84] px-7 py-3 text-[18px] font-medium uppercase tracking-[0.02em] text-white transition hover:bg-[#25306f]"
-                    >
-                      Apply Online
-                    </a>
-                  )}
-                </div>
-              )}
-
-              <div className="space-y-12 pt-4">
-                {safeProgram.sections.map((section, index) => {
-                  const imageFirst = index % 2 === 0;
-                  const textBlocks = (section.text || "El texto de la seccion aparecera aqui.")
-                    .split(/\n+/)
-                    .filter((block) => block.trim().length > 0);
-
-                  return (
-                    <article
-                      key={section.id}
-                      className="grid gap-6 md:grid-cols-[minmax(0,380px)_minmax(0,1fr)] md:items-start"
-                    >
-                      <div
-                        className={
-                          imageFirst
-                            ? "order-1"
-                            : "order-1 md:order-2"
-                        }
-                      >
-                        <div className="overflow-hidden border border-[#bbbbbb] bg-[#d6d6d6]">
-                          {section.image ? (
-                            <img
-                              src={section.image}
-                              alt={section.title || `Section ${index + 1}`}
-                              className="h-[250px] w-full object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-[250px] items-center justify-center text-sm text-gray-600">
-                              Imagen de la seccion
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div
-                        className={
-                          imageFirst
-                            ? "order-2"
-                            : "order-2 md:order-1"
-                        }
-                      >
-                        <h3 className="text-[30px] font-semibold leading-tight text-[#1e3f8f] sm:text-[44px]">
-                          {section.title || "Titulo de la seccion"}
-                        </h3>
-                        <div className="mt-4 space-y-4">
-                          {textBlocks.map((block, blockIndex) => (
-                            <p
-                              key={blockIndex}
-                              className="text-[17px] leading-7 text-[#2f2f2f]"
-                            >
-                              {block}
-                            </p>
-                          ))}
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            </section>
-          </div>
-        </div>
-      </Modal>
     </>
   );
 }
-
-
