@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DeleteObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
-import Label from "../form/Label";
 import { Modal } from "../ui/modal";
 import { buildS3PublicUrl, resolveS3ImageUrl } from "../../utils/s3Image";
 
@@ -44,8 +43,17 @@ const getS3ErrorMessage = (error: unknown, fallback: string) => {
   const code = maybeError.Code ?? maybeError.name ?? "S3Error";
   const message = maybeError.message ?? "Unknown error";
   const status = maybeError.$metadata?.httpStatusCode;
+  const detail = `${fallback} (${code}${status ? ` ${status}` : ""}): ${message}`;
 
-  return `${fallback} (${code}${status ? ` ${status}` : ""}): ${message}`;
+  if (status === 403 || code === "AccessDenied") {
+    return `${detail}. Las credenciales pueden listar, pero necesitan permiso s3:PutObject para subir.`;
+  }
+
+  if (code === "TypeError" || /failed to fetch|network/i.test(message)) {
+    return `${detail}. Si ocurre en el navegador, revisa CORS del bucket: debe permitir PUT y headers x-amz-*.`;
+  }
+
+  return detail;
 };
 
 const normalizePrefix = (prefix: string) => {
@@ -73,6 +81,7 @@ export default function S3ImageManager({
   const [searchTerm, setSearchTerm] = useState("");
   const [message, setMessage] = useState<string>("");
   const [error, setError] = useState<string>("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const accessKeyId = import.meta.env.VITE_AWS_ACCESS_KEY_ID ?? "";
   const secretAccessKey = import.meta.env.VITE_AWS_SECRET_ACCESS_KEY ?? "";
   const sessionToken = import.meta.env.VITE_AWS_SESSION_TOKEN;
@@ -93,6 +102,7 @@ export default function S3ImageManager({
 
     return new S3Client({
       region,
+      requestChecksumCalculation: "WHEN_REQUIRED",
       credentials: {
         accessKeyId,
         secretAccessKey,
@@ -157,12 +167,17 @@ export default function S3ImageManager({
         return;
       }
 
+      if (!file.type.startsWith("image/")) {
+        setError("Solo se permiten archivos de imagen.");
+        return;
+      }
+
       setIsUploading(true);
       setError("");
       setMessage("");
 
       const normalizedPrefix = normalizePrefix(prefix);
-      const cleanName = file.name.replace(/[^\w.\-]+/g, "-");
+      const cleanName = file.name.replace(/[^\w.-]+/g, "-");
       const key = `${normalizedPrefix}${Date.now()}-${cleanName}`;
 
       try {
@@ -279,17 +294,20 @@ export default function S3ImageManager({
               >
                 {isLoading ? "Cargando..." : "Actualizar"}
               </button>
-              <Label
-                htmlFor="s3-upload"
-                className="mb-0 cursor-pointer rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoading || isUploading}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
               >
                 {isUploading ? "Subiendo..." : "Subir imagen"}
-              </Label>
+              </button>
               <input
+                ref={fileInputRef}
                 id="s3-upload"
                 type="file"
                 accept="image/*"
-                disabled={isUploading}
+                disabled={isLoading || isUploading}
                 className="hidden"
                 onChange={(event) => {
                   const file = event.target.files?.[0];
