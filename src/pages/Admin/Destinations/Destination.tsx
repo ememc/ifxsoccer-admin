@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import ComponentCard from "../../../components/common/ComponentCard";
 import PageBreadcrumb from "../../../components/common/PageBreadCrumb";
@@ -8,32 +8,236 @@ import Input from "../../../components/form/input/InputField";
 import TextArea from "../../../components/form/input/TextArea";
 import S3ImageManager from "../../../components/page/S3ImageManager";
 import Button from "../../../components/ui/button/Button";
-import { Modal } from "../../../components/ui/modal";
-import { useModal } from "../../../hooks/useModal";
+import { resolveS3ImageUrl } from "../../../utils/s3Image";
 import {
-  createEmptyDestinationHeroSlide,
+  createDestination as createDestinationRequest,
   createEmptyDestination,
+  createEmptyDestinationAcademy,
+  createEmptyDestinationCity,
+  createEmptyDestinationHero,
   createEmptyDestinationSection,
-  loadDestinations,
-  upsertDestination,
+  fetchDestination,
+  normalizeEnabled,
+  updateDestination as updateDestinationRequest,
 } from "./destinationData";
-import type { Destination, DestinationHeroSlide, DestinationSection } from "./destinationData";
+import type {
+  Destination,
+  DestinationAcademy,
+  DestinationCity,
+  DestinationHero,
+  DestinationSection,
+} from "./destinationData";
 
-const getPreviewClasses = (index: number) =>
-  index % 2 === 0
-    ? "lg:grid-cols-[minmax(0,220px)_minmax(0,1fr)]"
-    : "lg:grid-cols-[minmax(0,1fr)_minmax(0,220px)]";
-const DEFAULT_HERO_CAPTION = "YOU COULD BE NEXT!";
+const removeAt = <T,>(items: T[], index: number): T[] =>
+  items.filter((_, itemIndex) => itemIndex !== index);
+
+const richTextClasses =
+  "min-h-[260px] w-full rounded-b-xl border border-t-0 border-gray-300 bg-white px-5 py-4 text-sm leading-7 text-gray-800 outline-hidden focus:border-brand-300 focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800 [&_h1]:mb-4 [&_h1]:text-3xl [&_h1]:font-semibold [&_h1]:leading-tight [&_h2]:mb-3 [&_h2]:text-2xl [&_h2]:font-semibold [&_h2]:leading-tight [&_h3]:mb-2 [&_h3]:text-xl [&_h3]:font-semibold [&_img]:my-5 [&_img]:max-h-[420px] [&_img]:w-full [&_img]:rounded-xl [&_img]:object-cover [&_li]:ml-5 [&_li]:list-disc [&_p]:mb-3";
+
+const sanitizeRichHtml = (html: string): string => {
+  const content = String(html ?? "");
+
+  if (typeof document === "undefined") {
+    return content;
+  }
+
+  const template = document.createElement("template");
+  template.innerHTML = content;
+
+  template.content
+    .querySelectorAll("script, style, iframe, object, embed, link, meta")
+    .forEach((element) => element.remove());
+
+  template.content.querySelectorAll("*").forEach((element) => {
+    Array.from(element.attributes).forEach((attribute) => {
+      const name = attribute.name.toLowerCase();
+      const value = attribute.value.trim().toLowerCase();
+      const isUnsafeUrl =
+        (name === "href" || name === "src") &&
+        (value.startsWith("javascript:") || value.startsWith("data:text/html"));
+
+      if (name.startsWith("on") || name === "style" || isUnsafeUrl) {
+        element.removeAttribute(attribute.name);
+      }
+    });
+  });
+
+  return template.innerHTML;
+};
+
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const textToHtml = (value: string) =>
+  value
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`)
+    .join("");
+
+interface RichTextEditorProps {
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}
+
+function RichTextEditor({ value, onChange, disabled = false }: RichTextEditorProps) {
+  const editorRef = useRef<HTMLDivElement>(null);
+  const lastHtmlRef = useRef("");
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    const sanitizedValue = sanitizeRichHtml(value);
+
+    if (!editor) {
+      return;
+    }
+
+    if (sanitizedValue !== lastHtmlRef.current && editor.innerHTML !== sanitizedValue) {
+      editor.innerHTML = sanitizedValue;
+      lastHtmlRef.current = sanitizedValue;
+    }
+  }, [value]);
+
+  const syncEditorHtml = () => {
+    const editor = editorRef.current;
+    const nextHtml = sanitizeRichHtml(editor?.innerHTML ?? "");
+    lastHtmlRef.current = nextHtml;
+    onChange(nextHtml);
+  };
+
+  const runEditorCommand = (command: string, commandValue?: string) => {
+    if (disabled) {
+      return;
+    }
+
+    editorRef.current?.focus();
+    document.execCommand(command, false, commandValue);
+    syncEditorHtml();
+  };
+
+  const insertImage = () => {
+    const imageUrl = window.prompt("URL de imagen");
+    const trimmedUrl = imageUrl?.trim();
+
+    if (!trimmedUrl) {
+      return;
+    }
+
+    runEditorCommand("insertImage", trimmedUrl);
+  };
+
+  const handlePaste = (event: ClipboardEvent<HTMLDivElement>) => {
+    event.preventDefault();
+
+    const html = event.clipboardData.getData("text/html");
+    const text = event.clipboardData.getData("text/plain");
+    const content = html ? sanitizeRichHtml(html) : textToHtml(text);
+
+    document.execCommand("insertHTML", false, content);
+    syncEditorHtml();
+  };
+
+  const buttonClasses =
+    "inline-flex h-9 min-w-9 items-center justify-center rounded-md border border-gray-300 bg-white px-3 text-xs font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-white/[0.03]";
+
+  return (
+    <div>
+      <div className="flex flex-wrap gap-2 rounded-t-xl border border-gray-300 bg-gray-50 p-2 dark:border-gray-700 dark:bg-gray-800/60">
+        <button
+          type="button"
+          className={buttonClasses}
+          disabled={disabled}
+          onClick={() => runEditorCommand("formatBlock", "H1")}
+        >
+          H1
+        </button>
+        <button
+          type="button"
+          className={buttonClasses}
+          disabled={disabled}
+          onClick={() => runEditorCommand("formatBlock", "H2")}
+        >
+          H2
+        </button>
+        <button
+          type="button"
+          className={buttonClasses}
+          disabled={disabled}
+          onClick={() => runEditorCommand("formatBlock", "P")}
+        >
+          P
+        </button>
+        <button
+          type="button"
+          className={buttonClasses}
+          disabled={disabled}
+          onClick={() => runEditorCommand("bold")}
+        >
+          B
+        </button>
+        <button
+          type="button"
+          className={buttonClasses}
+          disabled={disabled}
+          onClick={() => runEditorCommand("italic")}
+        >
+          I
+        </button>
+        <button
+          type="button"
+          className={buttonClasses}
+          disabled={disabled}
+          onClick={() => runEditorCommand("insertUnorderedList")}
+        >
+          List
+        </button>
+        <button
+          type="button"
+          className={buttonClasses}
+          disabled={disabled}
+          onClick={insertImage}
+        >
+          Img
+        </button>
+        <button
+          type="button"
+          className={buttonClasses}
+          disabled={disabled}
+          onClick={() => runEditorCommand("removeFormat")}
+        >
+          Clear
+        </button>
+      </div>
+      <div
+        ref={editorRef}
+        className={richTextClasses}
+        contentEditable={!disabled}
+        suppressContentEditableWarning
+        onBlur={syncEditorHtml}
+        onInput={syncEditorHtml}
+        onPaste={handlePaste}
+      />
+    </div>
+  );
+}
 
 export default function Destination() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const { isOpen, openModal, closeModal } = useModal();
 
-  const [Destination, setProgram] = useState<Destination | null>(null);
+  const [destination, setDestination] = useState<Destination | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [heroImageDraft, setHeroImageDraft] = useState("");
-  const [carouselIndex, setCarouselIndex] = useState(0);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const decodedId = useMemo(() => {
     if (!id || id === "new") {
@@ -47,188 +251,169 @@ export default function Destination() {
     }
   }, [id]);
 
-  useEffect(() => {
-    if (decodedId === "") {
-      setProgram(createEmptyDestination());
-      return;
-    }
-
-    if (decodedId === "new") {
-      setProgram(createEmptyDestination());
-      return;
-    }
-
-    const found = loadDestinations().find((item) => item.id === decodedId);
-    setProgram(found ?? createEmptyDestination());
-  }, [decodedId]);
-
-  const safeProgram = Destination ?? createEmptyDestination();
-  const validHeroSlides = useMemo(
-    () => safeProgram.heroImages.filter((slide) => slide.image.trim().length > 0),
-    [safeProgram.heroImages]
+  const emptyDestination = useMemo(
+    () =>
+      createEmptyDestination(
+        decodedId === "new" || decodedId === "" ? undefined : decodedId
+      ),
+    [decodedId]
   );
-  const primaryHeroSlide =
-    validHeroSlides.find((slide) => slide.id === safeProgram.primaryHeroImageId) ??
-    validHeroSlides[0];
-  const primaryHeroIndex = primaryHeroSlide
-    ? Math.max(
-        0,
-        validHeroSlides.findIndex((slide) => slide.id === primaryHeroSlide.id)
-      )
-    : 0;
-  const activeHeroSlide = validHeroSlides[carouselIndex] ?? primaryHeroSlide;
 
-  const normalizeDestinationImages = (nextProgram: Destination): Destination => {
-    const normalizedSlides = nextProgram.heroImages.reduce<DestinationHeroSlide[]>(
-      (acc, slide, index) => {
-        const id = String(slide.id || `hero-${Date.now()}-${index}`);
-        if (acc.some((item) => item.id === id)) {
-          return acc;
+  useEffect(() => {
+    if (decodedId === "" || decodedId === "new") {
+      setDestination(createEmptyDestination());
+      setLoadError(decodedId === "" ? "Id invalido en la URL." : null);
+      setLoading(false);
+      return;
+    }
+
+    let isCurrent = true;
+
+    const loadDestination = async () => {
+      setLoading(true);
+      setLoadError(null);
+
+      try {
+        const found = await fetchDestination(decodedId);
+
+        if (!isCurrent) {
+          return;
         }
 
-        acc.push({
-          id,
-          image: String(slide.image ?? "").trim(),
-          caption: String(slide.caption ?? DEFAULT_HERO_CAPTION).trim() || DEFAULT_HERO_CAPTION,
-          applyNowUrl: String(slide.applyNowUrl ?? "").trim(),
-        });
-        return acc;
-      },
-      []
-    );
-    const slidesWithImage = normalizedSlides.filter((slide) => slide.image.length > 0);
-    const primarySlide =
-      slidesWithImage.find((slide) => slide.id === nextProgram.primaryHeroImageId) ??
-      slidesWithImage[0];
+        setDestination(found);
+      } catch {
+        if (!isCurrent) {
+          return;
+        }
 
-    return {
-      ...nextProgram,
-      heroImages: normalizedSlides,
-      primaryHeroImageId: primarySlide?.id ?? normalizedSlides[0]?.id ?? "",
-      mainImage: primarySlide?.image ?? "",
-    };
-  };
-
-  const updateProgram = (patch: Partial<Destination>) => {
-    setProgram(normalizeDestinationImages({ ...safeProgram, ...patch }));
-    setSaveMessage(null);
-  };
-
-  const addHeroImage = (imageUrl: string, setAsPrimary = false) => {
-    const trimmed = imageUrl.trim();
-    if (!trimmed) {
-      return;
-    }
-
-    const alreadyExists = safeProgram.heroImages.some((slide) => slide.image === trimmed);
-    if (alreadyExists) {
-      return;
-    }
-
-    const newSlide: DestinationHeroSlide = {
-      ...createEmptyDestinationHeroSlide(safeProgram.heroImages.length),
-      image: trimmed,
-      caption: DEFAULT_HERO_CAPTION,
-      applyNowUrl: safeProgram.applyOnlineUrl,
-    };
-
-    updateProgram({
-      heroImages: [...safeProgram.heroImages, newSlide],
-      primaryHeroImageId:
-        setAsPrimary || !primaryHeroSlide ? newSlide.id : safeProgram.primaryHeroImageId,
-    });
-    setHeroImageDraft("");
-  };
-
-  const updateHeroSlide = (slideId: string, patch: Partial<DestinationHeroSlide>) => {
-    updateProgram({
-      heroImages: safeProgram.heroImages.map((slide) =>
-        slide.id === slideId ? { ...slide, ...patch } : slide
-      ),
-    });
-  };
-
-  const removeHeroImage = (slideId: string) => {
-    const nextSlides = safeProgram.heroImages.filter((slide) => slide.id !== slideId);
-    const nextPrimary =
-      safeProgram.primaryHeroImageId === slideId
-        ? nextSlides.find((slide) => slide.image.trim())?.id ?? nextSlides[0]?.id ?? ""
-        : safeProgram.primaryHeroImageId;
-
-    updateProgram({
-      heroImages: nextSlides,
-      primaryHeroImageId: nextPrimary,
-    });
-  };
-
-  const setPrimaryHeroImage = (slideId: string) => {
-    updateProgram({ primaryHeroImageId: slideId });
-  };
-
-  const updateSection = (
-    sectionId: string,
-    patch: Partial<DestinationSection>
-  ) => {
-    updateProgram({
-      sections: safeProgram.sections.map((section) =>
-        section.id === sectionId ? { ...section, ...patch } : section
-      ),
-    });
-  };
-
-  const addSection = () => {
-    updateProgram({
-      sections: [
-        ...safeProgram.sections,
-        createEmptyDestinationSection(safeProgram.sections.length),
-      ],
-    });
-  };
-
-  const removeSection = (sectionId: string) => {
-    updateProgram({
-      sections: safeProgram.sections.filter((section) => section.id !== sectionId),
-    });
-  };
-
-  const onSave = () => {
-    upsertDestination(normalizeDestinationImages(safeProgram));
-    setSaveMessage("Programa guardado localmente.");
-
-    if (decodedId === "new") {
-      navigate(`/destinations/${btoa(safeProgram.id)}`, { replace: true });
-    }
-  };
-
-  useEffect(() => {
-    setCarouselIndex((current) => {
-      if (validHeroSlides.length === 0) {
-        return 0;
+        setDestination(createEmptyDestination(decodedId));
+        setLoadError("No se pudo cargar el destino del API.");
+      } finally {
+        if (isCurrent) {
+          setLoading(false);
+        }
       }
+    };
 
-      return Math.min(current, validHeroSlides.length - 1);
+    void loadDestination();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [decodedId]);
+
+  const safeDestination = destination ?? emptyDestination;
+
+  const updateDestination = (patch: Partial<Destination>) => {
+    setDestination({ ...safeDestination, ...patch });
+    setSaveMessage(null);
+    setSaveError(null);
+  };
+
+  const onSave = async () => {
+    setIsSaving(true);
+    setSaveMessage(null);
+    setSaveError(null);
+
+    try {
+      const isNewDestination = decodedId === "new";
+      const destinationToSave = isNewDestination
+        ? safeDestination
+        : { ...safeDestination, destination_id: decodedId };
+      const savedDestination = isNewDestination
+        ? await createDestinationRequest(destinationToSave)
+        : await updateDestinationRequest(destinationToSave);
+
+      setDestination(savedDestination);
+      setSaveMessage(
+        isNewDestination
+          ? "Destino creado correctamente."
+          : "Destino actualizado correctamente."
+      );
+
+      if (isNewDestination) {
+        navigate(`/destinations/${btoa(savedDestination.destination_id)}`, {
+          replace: true,
+        });
+      }
+    } catch (error) {
+      const apiError = error instanceof Error ? ` ${error.message}` : "";
+      setSaveError(
+        decodedId === "new"
+          ? `No se pudo crear el destino en el API.${apiError}`
+          : `No se pudo actualizar el destino en el API.${apiError}`
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const updateHero = (index: number, patch: Partial<DestinationHero>) => {
+    updateDestination({
+      destination_hero: safeDestination.destination_hero.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, ...patch } : item
+      ),
     });
-  }, [validHeroSlides.length]);
+  };
 
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
+  const updateSection = (index: number, patch: Partial<DestinationSection>) => {
+    updateDestination({
+      destination_section: safeDestination.destination_section.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, ...patch } : item
+      ),
+    });
+  };
 
-    setCarouselIndex(primaryHeroIndex);
-  }, [isOpen, primaryHeroIndex]);
+  const updateCity = (index: number, patch: Partial<DestinationCity>) => {
+    updateDestination({
+      destination_cities: safeDestination.destination_cities.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, ...patch } : item
+      ),
+    });
+  };
 
-  useEffect(() => {
-    if (!isOpen || validHeroSlides.length <= 1) {
-      return;
-    }
+  const updateAcademy = (index: number, patch: Partial<DestinationAcademy>) => {
+    updateDestination({
+      destination_academies: safeDestination.destination_academies.map(
+        (item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)
+      ),
+    });
+  };
 
-    const timer = window.setInterval(() => {
-      setCarouselIndex((current) => (current + 1) % validHeroSlides.length);
-    }, 4000);
+  const renderImageField = (
+    idPrefix: string,
+    value: string,
+    onChange: (url: string) => void
+  ) => {
+    const previewUrl = resolveS3ImageUrl(value);
 
-    return () => window.clearInterval(timer);
-  }, [validHeroSlides.length, isOpen]);
+    return (
+      <div className="space-y-3">
+        <div>
+          <Label htmlFor={`${idPrefix}-image`}>Image URL</Label>
+          <Input
+            id={`${idPrefix}-image`}
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            placeholder="https://.../image.jpg"
+          />
+        </div>
+        {previewUrl && (
+          <div className="h-36 overflow-hidden rounded-xl border border-gray-200 bg-gray-100 dark:border-white/[0.08] dark:bg-gray-900">
+            <img
+              src={previewUrl}
+              alt="Preview"
+              className="h-full w-full object-cover"
+              onError={(event) => {
+                event.currentTarget.src = "/images/logo/ifx-logo.png";
+              }}
+            />
+          </div>
+        )}
+        <S3ImageManager selectedUrl={value} onSelect={onChange} />
+      </div>
+    );
+  };
 
   return (
     <>
@@ -239,7 +424,7 @@ export default function Destination() {
       <div className="space-y-6">
         <ComponentCard
           title={decodedId === "new" ? "New Destination" : "Destination"}
-          desc="Front provisional con persistencia local mientras el API queda listo."
+          desc="Mantenedor conectado al API de destinations."
         >
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -248,54 +433,61 @@ export default function Destination() {
                   {saveMessage}
                 </p>
               )}
+              {saveError && (
+                <p className="text-sm text-error-600 dark:text-error-400">{saveError}</p>
+              )}
+              {loadError && (
+                <p className="text-sm text-error-600 dark:text-error-400">{loadError}</p>
+              )}
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={openModal}>
-                Preview Destination
-              </Button>
               <Button
                 variant="outline"
                 onClick={() => navigate("/destinations-list")}
               >
                 Back to List
               </Button>
-              <Button onClick={onSave}>Save Destination</Button>
+              <Button onClick={onSave} disabled={isSaving || loading}>
+                {isSaving ? "Saving..." : "Save Destination"}
+              </Button>
             </div>
           </div>
 
-          <div className="rounded-2xl border-2 border-[#3558a8] bg-[#f5f8ff] p-4 dark:border-[#4f6cb2] dark:bg-[#101a33]">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-[#234487] dark:text-[#9fb5e8]">
-                Main Destination Content
-              </h3>
-              <span className="rounded-md bg-[#dce6fb] px-2 py-1 text-xs font-semibold text-[#234487] dark:bg-[#1a2b54] dark:text-[#b6c7ef]">
-                Principal
-              </span>
+          {loading ? (
+            <div className="py-6 text-sm text-gray-500 dark:text-gray-400">
+              Cargando destino...
             </div>
-
-            <div className="space-y-6">
+          ) : (
+            <div className="mt-6 space-y-6">
               <div className="grid gap-6 lg:grid-cols-2">
                 <div>
-                  <Label htmlFor="Destination-title">Titulo</Label>
+                  <Label htmlFor="destination-id">Id</Label>
                   <Input
-                    id="Destination-title"
-                    value={safeProgram.title}
-                    onChange={(e) => updateProgram({ title: e.target.value })}
-                    placeholder="Nombre del programa"
+                    id="destination-id"
+                    value={safeDestination.destination_id}
+                    disabled
                   />
                 </div>
                 <div>
-                  <Label>Status</Label>
+                  <Label>State</Label>
                   <div className="flex gap-2">
                     <Button
-                      variant={safeProgram.enabled === 1 ? "primary" : "outline"}
-                      onClick={() => updateProgram({ enabled: 1 })}
+                      variant={
+                        normalizeEnabled(safeDestination.destination_state) === 1
+                          ? "primary"
+                          : "outline"
+                      }
+                      onClick={() => updateDestination({ destination_state: true })}
                     >
                       Enabled
                     </Button>
                     <Button
-                      variant={safeProgram.enabled === 0 ? "primary" : "outline"}
-                      onClick={() => updateProgram({ enabled: 0 })}
+                      variant={
+                        normalizeEnabled(safeDestination.destination_state) === 0
+                          ? "primary"
+                          : "outline"
+                      }
+                      onClick={() => updateDestination({ destination_state: false })}
                     >
                       Disabled
                     </Button>
@@ -303,457 +495,425 @@ export default function Destination() {
                 </div>
               </div>
 
-              <div className="space-y-4 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900/60">
-                <div className="flex items-center justify-between gap-3">
-                  <Label>Imagenes Hero (Carrusel)</Label>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Selecciona una imagen principal para portada.
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap items-end gap-3">
-                  <div className="min-w-[260px] flex-1">
-                    <Label htmlFor="hero-image-draft">Agregar URL</Label>
-                    <Input
-                      id="hero-image-draft"
-                      value={heroImageDraft}
-                      onChange={(e) => setHeroImageDraft(e.target.value)}
-                      placeholder="https://..."
-                    />
-                  </div>
-                  <Button
-                    onClick={() => addHeroImage(heroImageDraft, validHeroSlides.length === 0)}
-                  >
-                    Add Image
-                  </Button>
-                </div>
-
+              <div className="grid gap-6 lg:grid-cols-2">
                 <div>
-                  <Label>Biblioteca S3 Hero</Label>
-                  <S3ImageManager
-                    selectedUrl={primaryHeroSlide?.image ?? ""}
-                    onSelect={(url) => addHeroImage(url, validHeroSlides.length === 0)}
+                  <Label htmlFor="destination-title">Title</Label>
+                  <Input
+                    id="destination-title"
+                    value={safeDestination.destination_title}
+                    onChange={(event) =>
+                      updateDestination({ destination_title: event.target.value })
+                    }
+                    placeholder="Nombre del destino"
                   />
                 </div>
-
-                <div className="space-y-3">
-                  {safeProgram.heroImages.length === 0 ? (
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      Aun no hay imagenes en el carrusel.
-                    </p>
-                  ) : (
-                    safeProgram.heroImages.map((slide, index) => (
-                      <div
-                        key={slide.id}
-                        className="rounded-xl border border-gray-200 p-3 dark:border-gray-800"
-                      >
-                        <div className="grid gap-3 lg:grid-cols-[110px_minmax(0,1fr)]">
-                          <div className="h-20 w-full overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800">
-                            {slide.image ? (
-                              <img
-                                src={slide.image}
-                                alt={`Hero ${index + 1}`}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <div className="flex h-full items-center justify-center text-xs text-gray-500">
-                                Sin imagen
-                              </div>
-                            )}
-                          </div>
-                          <div className="grid gap-3">
-                            <Input
-                              value={slide.image}
-                              onChange={(e) =>
-                                updateHeroSlide(slide.id, { image: e.target.value })
-                              }
-                              placeholder="Image URL https://..."
-                            />
-                            <Input
-                              value={slide.caption}
-                              onChange={(e) =>
-                                updateHeroSlide(slide.id, { caption: e.target.value })
-                              }
-                              placeholder="Texto overlay (ej: YOU COULD BE NEXT!)"
-                            />
-                            <Input
-                              value={slide.applyNowUrl}
-                              onChange={(e) =>
-                                updateHeroSlide(slide.id, { applyNowUrl: e.target.value })
-                              }
-                              placeholder="Apply Now URL https://..."
-                            />
-                            <div className="flex flex-wrap gap-2">
-                              <Button
-                                variant={
-                                  safeProgram.primaryHeroImageId === slide.id
-                                    ? "primary"
-                                    : "outline"
-                                }
-                                size="sm"
-                                onClick={() => setPrimaryHeroImage(slide.id)}
-                              >
-                                {safeProgram.primaryHeroImageId === slide.id
-                                  ? "Principal"
-                                  : "Set Principal"}
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => removeHeroImage(slide.id)}
-                              >
-                                Delete
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
+                <div>
+                  <Label htmlFor="destination-category">Category</Label>
+                  <Input
+                    id="destination-category"
+                    value={safeDestination.destination_category}
+                    onChange={(event) =>
+                      updateDestination({ destination_category: event.target.value })
+                    }
+                    placeholder="Categoria"
+                  />
                 </div>
-              </div>
-
-              <div>
-                <Label>Texto Principal</Label>
-                <TextArea
-                  rows={5}
-                  value={safeProgram.mainText}
-                  onChange={(value) => updateProgram({ mainText: value })}
-                  placeholder="Descripcion principal del programa"
-                />
               </div>
 
               <div className="grid gap-6 lg:grid-cols-2">
                 <div>
-                  <Label htmlFor="learn-more-url">Learn More URL</Label>
+                  <Label htmlFor="destination-date">Date</Label>
                   <Input
-                    id="learn-more-url"
-                    value={safeProgram.learnMoreUrl}
-                    onChange={(e) => updateProgram({ learnMoreUrl: e.target.value })}
-                    placeholder="https://..."
+                    id="destination-date"
+                    type="date"
+                    value={safeDestination.destination_date}
+                    onChange={(event) =>
+                      updateDestination({ destination_date: event.target.value })
+                    }
                   />
                 </div>
                 <div>
-                  <Label htmlFor="apply-online-url">Apply Online URL</Label>
+                  <Label htmlFor="destination-tags">Tags</Label>
                   <Input
-                    id="apply-online-url"
-                    value={safeProgram.applyOnlineUrl}
-                    onChange={(e) => updateProgram({ applyOnlineUrl: e.target.value })}
-                    placeholder="https://..."
+                    id="destination-tags"
+                    value={safeDestination.destination_tags}
+                    onChange={(event) =>
+                      updateDestination({ destination_tags: event.target.value })
+                    }
+                    placeholder="tag1, tag2"
                   />
                 </div>
               </div>
+
+              <div>
+                <Label htmlFor="destination-description">Description</Label>
+                <TextArea
+                  rows={4}
+                  value={safeDestination.destination_description}
+                  onChange={(value) =>
+                    updateDestination({ destination_description: value })
+                  }
+                  placeholder="Descripcion principal del destino"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="destination-text">Text</Label>
+                <TextArea
+                  rows={6}
+                  value={safeDestination.destination_text}
+                  onChange={(value) => updateDestination({ destination_text: value })}
+                  placeholder="Texto largo del destino"
+                />
+              </div>
             </div>
+          )}
+        </ComponentCard>
+
+        <ComponentCard title="Destination Hero" desc="Carrusel principal del destino.">
+          <div className="mb-4 flex justify-end">
+            <Button
+              onClick={() =>
+                updateDestination({
+                  destination_hero: [
+                    ...safeDestination.destination_hero,
+                    createEmptyDestinationHero(),
+                  ],
+                })
+              }
+            >
+              Add Hero
+            </Button>
+          </div>
+
+          <div className="space-y-4">
+            {safeDestination.destination_hero.map((item, index) => (
+              <div
+                key={`hero-${index}`}
+                className="rounded-xl border border-gray-200 p-4 dark:border-gray-800"
+              >
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                    Hero {index + 1}
+                  </h4>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      updateDestination({
+                        destination_hero: removeAt(
+                          safeDestination.destination_hero,
+                          index
+                        ),
+                      })
+                    }
+                    disabled={safeDestination.destination_hero.length === 1}
+                  >
+                    Delete
+                  </Button>
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {renderImageField(`destination-hero-${index}`, item.image_url, (url) =>
+                    updateHero(index, { image_url: url })
+                  )}
+                  <div>
+                    <Label htmlFor={`destination-hero-text-${index}`}>Image Text</Label>
+                    <Input
+                      id={`destination-hero-text-${index}`}
+                      value={item.image_text}
+                      onChange={(event) =>
+                        updateHero(index, { image_text: event.target.value })
+                      }
+                      placeholder="Train in Europe"
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </ComponentCard>
 
-        <ComponentCard
-          title="Sections Builder"
-          desc="Cada seccion alterna automaticamente la disposicion entre imagen-izquierda y imagen-derecha."
-        >
-          <div className="rounded-2xl border-2 border-[#3558a8] bg-[#f5f8ff] p-4 dark:border-[#4f6cb2] dark:bg-[#101a33]">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-[#234487] dark:text-[#9fb5e8]">
-                Sections Area
-              </h3>
-              <span className="rounded-md bg-[#dce6fb] px-2 py-1 text-xs font-semibold text-[#234487] dark:bg-[#1a2b54] dark:text-[#b6c7ef]">
-                Sections
-              </span>
-            </div>
-            <div className="mb-4 flex justify-end">
-              <Button onClick={addSection}>Add Section</Button>
-            </div>
+        <ComponentCard title="Destination Sections" desc="Bloques de contenido.">
+          <div className="mb-4 flex justify-end">
+            <Button
+              onClick={() =>
+                updateDestination({
+                  destination_section: [
+                    ...safeDestination.destination_section,
+                    createEmptyDestinationSection(
+                      safeDestination.destination_section.length
+                    ),
+                  ],
+                })
+              }
+            >
+              Add Section
+            </Button>
+          </div>
 
-            {safeProgram.sections.map((section, index) => {
-              const imageFirst = index % 2 === 0;
+          <div className="space-y-4">
+            {safeDestination.destination_section.map((item, index) => (
+              <div
+                key={`section-${index}`}
+                className="rounded-xl border border-gray-200 p-4 dark:border-gray-800"
+              >
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                    Section {index + 1}
+                  </h4>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      updateDestination({
+                        destination_section: removeAt(
+                          safeDestination.destination_section,
+                          index
+                        ),
+                      })
+                    }
+                    disabled={safeDestination.destination_section.length === 1}
+                  >
+                    Delete
+                  </Button>
+                </div>
 
-              return (
-                <div
-                  key={section.id}
-                  className="mb-4 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900/60"
-                >
-                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {renderImageField(`destination-section-${index}`, item.section_image, (url) =>
+                    updateSection(index, { section_image: url })
+                  )}
+                  <div className="space-y-4">
                     <div>
-                      <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">
-                        Section {index + 1}
-                      </h4>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {imageFirst
-                          ? "Layout: imagen izquierda, titulo y texto a la derecha."
-                          : "Layout: titulo y texto a la izquierda, imagen a la derecha."}
-                      </p>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => removeSection(section.id)}
-                      disabled={safeProgram.sections.length === 1}
-                    >
-                      Delete Section
-                    </Button>
-                  </div>
-
-                  <div className="grid gap-4 lg:grid-cols-2">
-                    <div>
-                      <Label htmlFor={`section-title-${section.id}`}>Titulo</Label>
+                      <Label htmlFor={`destination-section-title-${index}`}>
+                        Section Title
+                      </Label>
                       <Input
-                        id={`section-title-${section.id}`}
-                        value={section.title}
-                        onChange={(e) =>
-                          updateSection(section.id, { title: e.target.value })
+                        id={`destination-section-title-${index}`}
+                        value={item.section_title}
+                        onChange={(event) =>
+                          updateSection(index, { section_title: event.target.value })
                         }
-                        placeholder="Titulo de la seccion"
                       />
                     </div>
                     <div>
-                      <Label htmlFor={`section-image-${section.id}`}>Imagen</Label>
+                      <Label htmlFor={`destination-section-order-${index}`}>
+                        Section Order
+                      </Label>
                       <Input
-                        id={`section-image-${section.id}`}
-                        value={section.image}
-                        onChange={(e) =>
-                          updateSection(section.id, { image: e.target.value })
+                        id={`destination-section-order-${index}`}
+                        value={item.section_order}
+                        onChange={(event) =>
+                          updateSection(index, { section_order: event.target.value })
                         }
-                        placeholder="https://..."
                       />
-                    </div>
-                  </div>
-
-                  <div>
-                    <Label>Texto</Label>
-                    <TextArea
-                      rows={4}
-                      value={section.text}
-                      onChange={(value) => updateSection(section.id, { text: value })}
-                      placeholder="Contenido de la seccion"
-                    />
-                  </div>
-
-                  <div>
-                    <Label>Biblioteca S3 Seccion</Label>
-                    <S3ImageManager
-                      selectedUrl={section.image}
-                      onSelect={(url) => updateSection(section.id, { image: url })}
-                    />
-                  </div>
-
-                  <div className="rounded-2xl bg-gray-50 p-4 dark:bg-white/[0.03]">
-                    <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                      Preview
-                    </p>
-                    <div className={`grid gap-4 ${getPreviewClasses(index)}`}>
-                      <div className={imageFirst ? "order-1" : "order-2"}>
-                        <div className="h-48 overflow-hidden rounded-2xl bg-gray-200 dark:bg-gray-800">
-                          {section.image ? (
-                            <img
-                              src={section.image}
-                              alt={section.title || `Section ${index + 1}`}
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-full items-center justify-center text-sm text-gray-400">
-                              Imagen de la seccion
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className={imageFirst ? "order-2" : "order-1"}>
-                        <h5 className="text-lg font-semibold text-gray-800 dark:text-white/90">
-                          {section.title || "Titulo de la seccion"}
-                        </h5>
-                        <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">
-                          {section.text || "El texto de la seccion aparecera aqui."}
-                        </p>
-                      </div>
                     </div>
                   </div>
                 </div>
-              );
-            })}
+
+                <div className="mt-4">
+                  <Label>Section Text</Label>
+                  <RichTextEditor
+                    value={item.section_text}
+                    onChange={(value) => updateSection(index, { section_text: value })}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </ComponentCard>
+
+        <ComponentCard title="Destination Cities" desc="Ciudades del destino.">
+          <div className="mb-4 flex justify-end">
+            <Button
+              onClick={() =>
+                updateDestination({
+                  destination_cities: [
+                    ...safeDestination.destination_cities,
+                    createEmptyDestinationCity(safeDestination.destination_cities.length),
+                  ],
+                })
+              }
+            >
+              Add City
+            </Button>
+          </div>
+
+          <div className="space-y-4">
+            {safeDestination.destination_cities.map((item, index) => (
+              <div
+                key={`city-${index}`}
+                className="rounded-xl border border-gray-200 p-4 dark:border-gray-800"
+              >
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                    City {index + 1}
+                  </h4>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      updateDestination({
+                        destination_cities: removeAt(
+                          safeDestination.destination_cities,
+                          index
+                        ),
+                      })
+                    }
+                    disabled={safeDestination.destination_cities.length === 1}
+                  >
+                    Delete
+                  </Button>
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {renderImageField(`destination-city-${index}`, item.city_image, (url) =>
+                    updateCity(index, { city_image: url })
+                  )}
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor={`destination-city-title-${index}`}>City Title</Label>
+                      <Input
+                        id={`destination-city-title-${index}`}
+                        value={item.city_title}
+                        onChange={(event) =>
+                          updateCity(index, { city_title: event.target.value })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor={`destination-city-order-${index}`}>City Order</Label>
+                      <Input
+                        id={`destination-city-order-${index}`}
+                        value={item.city_order}
+                        onChange={(event) =>
+                          updateCity(index, { city_order: event.target.value })
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <Label>City Text</Label>
+                  <TextArea
+                    rows={4}
+                    value={item.city_text}
+                    onChange={(value) => updateCity(index, { city_text: value })}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </ComponentCard>
+
+        <ComponentCard title="Destination Academies" desc="Academias del destino.">
+          <div className="mb-4 flex justify-end">
+            <Button
+              onClick={() =>
+                updateDestination({
+                  destination_academies: [
+                    ...safeDestination.destination_academies,
+                    createEmptyDestinationAcademy(
+                      safeDestination.destination_academies.length
+                    ),
+                  ],
+                })
+              }
+            >
+              Add Academy
+            </Button>
+          </div>
+
+          <div className="space-y-4">
+            {safeDestination.destination_academies.map((item, index) => (
+              <div
+                key={`academy-${index}`}
+                className="rounded-xl border border-gray-200 p-4 dark:border-gray-800"
+              >
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                    Academy {index + 1}
+                  </h4>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      updateDestination({
+                        destination_academies: removeAt(
+                          safeDestination.destination_academies,
+                          index
+                        ),
+                      })
+                    }
+                    disabled={safeDestination.destination_academies.length === 1}
+                  >
+                    Delete
+                  </Button>
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {renderImageField(
+                    `destination-academy-${index}`,
+                    item.academy_image,
+                    (url) => updateAcademy(index, { academy_image: url })
+                  )}
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor={`destination-academy-title-${index}`}>
+                        Academy Title
+                      </Label>
+                      <Input
+                        id={`destination-academy-title-${index}`}
+                        value={item.academy_title}
+                        onChange={(event) =>
+                          updateAcademy(index, { academy_title: event.target.value })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor={`destination-academy-order-${index}`}>
+                        Academy Order
+                      </Label>
+                      <Input
+                        id={`destination-academy-order-${index}`}
+                        value={item.academy_order}
+                        onChange={(event) =>
+                          updateAcademy(index, { academy_order: event.target.value })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor={`destination-academy-target-${index}`}>
+                        Academy Target
+                      </Label>
+                      <Input
+                        id={`destination-academy-target-${index}`}
+                        value={item.academy_target}
+                        onChange={(event) =>
+                          updateAcademy(index, { academy_target: event.target.value })
+                        }
+                        placeholder="#"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <Label>Academy Text</Label>
+                  <TextArea
+                    rows={4}
+                    value={item.academy_text}
+                    onChange={(value) =>
+                      updateAcademy(index, { academy_text: value })
+                    }
+                  />
+                </div>
+              </div>
+            ))}
           </div>
         </ComponentCard>
       </div>
-
-      <Modal isOpen={isOpen} onClose={closeModal} className="mx-4 max-w-7xl p-0">
-        <div className="max-h-[88vh] overflow-y-auto bg-[#e3e3e3] p-3 sm:p-5">
-          <div className="mx-auto w-full max-w-[1100px] overflow-hidden rounded-[22px] bg-white text-[#1e1e1e]">
-            <header className="bg-[#efefef]">
-              <h1 className="px-4 py-3 text-center text-[20px] font-semibold text-[#153a84] sm:text-[34px]">
-                {safeProgram.title || "Destination Title"}
-              </h1>
-            </header>
-
-            <section className="relative h-[300px] overflow-hidden sm:h-[480px]">
-              {activeHeroSlide ? (
-                <img
-                  src={activeHeroSlide.image}
-                  alt={safeProgram.title || "Destination"}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <div className="flex h-full items-center justify-center bg-[#cfcfcf] text-sm text-gray-600">
-                  Imagen principal del programa
-                </div>
-              )}
-              <div className="absolute inset-0 bg-black/10" />
-              {activeHeroSlide && (
-                <a
-                  href={activeHeroSlide.applyNowUrl || safeProgram.applyOnlineUrl || "#"}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="absolute right-4 top-6 inline-flex min-h-[64px] min-w-[220px] items-center justify-center rounded-[8px] bg-[#49549a] px-6 py-3 text-[24px] font-semibold uppercase tracking-[0.01em] text-white transition hover:bg-[#3f4a8a] sm:right-8 sm:top-24"
-                >
-                  Apply Now
-                </a>
-              )}
-              <div className="absolute bottom-8 left-1/2 w-[92%] -translate-x-1/2 px-3 sm:bottom-14 sm:w-auto">
-                <span className="inline-block bg-black/65 px-5 py-2 text-center text-[44px] font-medium uppercase leading-none tracking-tight text-white sm:text-[82px]">
-                  {activeHeroSlide?.caption || DEFAULT_HERO_CAPTION}
-                </span>
-              </div>
-              <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 gap-1.5">
-                {validHeroSlides.map((slide, index) => (
-                  <button
-                    key={slide.id}
-                    type="button"
-                    onClick={() => setCarouselIndex(index)}
-                    className={`h-2.5 w-2.5 rounded-full transition ${
-                      index === carouselIndex ? "bg-white" : "bg-white/55"
-                    }`}
-                  />
-                ))}
-              </div>
-              {validHeroSlides.length > 1 && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setCarouselIndex((current) =>
-                        current === 0 ? validHeroSlides.length - 1 : current - 1
-                      )
-                    }
-                    className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-[#3f4c90]/80 px-4 py-2 text-3xl leading-none text-white transition hover:bg-[#37447f] sm:left-8"
-                  >
-                    {"<"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setCarouselIndex((current) => (current + 1) % validHeroSlides.length)
-                    }
-                    className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-[#3f4c90]/80 px-4 py-2 text-3xl leading-none text-white transition hover:bg-[#37447f] sm:right-8"
-                  >
-                    {">"}
-                  </button>
-                </>
-              )}
-            </section>
-
-            <section className="space-y-8 bg-white px-6 py-10 sm:px-10">
-              <h2 className="text-[26px] font-semibold leading-tight text-[#1e3f8f] sm:text-[39px]">
-                {safeProgram.title
-                  ? `${safeProgram.title} - Destination Overview`
-                  : "Destination Overview"}
-              </h2>
-
-              {(safeProgram.mainText || "El texto principal del programa aparecera aqui.")
-                .split(/\n+/)
-                .filter((block) => block.trim().length > 0)
-                .map((block, index) => (
-                  <p key={index} className="text-[18px] leading-7 text-[#2a2a2a]">
-                    {block}
-                  </p>
-                ))}
-
-              {(safeProgram.learnMoreUrl || safeProgram.applyOnlineUrl) && (
-                <div className="flex flex-wrap items-center gap-4 pt-3">
-                  {safeProgram.learnMoreUrl && (
-                    <a
-                      href={safeProgram.learnMoreUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex min-h-[48px] min-w-[220px] items-center justify-center rounded-[8px] border border-[#b9b089] bg-transparent px-7 py-3 text-[18px] font-medium uppercase tracking-[0.02em] text-[#817848] transition hover:bg-[#f1eedf]"
-                    >
-                      Learn More
-                    </a>
-                  )}
-                  {safeProgram.applyOnlineUrl && (
-                    <a
-                      href={safeProgram.applyOnlineUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex min-h-[48px] min-w-[260px] items-center justify-center rounded-[8px] bg-[#2e3a84] px-7 py-3 text-[18px] font-medium uppercase tracking-[0.02em] text-white transition hover:bg-[#25306f]"
-                    >
-                      Apply Online
-                    </a>
-                  )}
-                </div>
-              )}
-
-              <div className="space-y-12 pt-4">
-                {safeProgram.sections.map((section, index) => {
-                  const imageFirst = index % 2 === 0;
-                  const textBlocks = (section.text || "El texto de la seccion aparecera aqui.")
-                    .split(/\n+/)
-                    .filter((block) => block.trim().length > 0);
-
-                  return (
-                    <article
-                      key={section.id}
-                      className="grid gap-6 md:grid-cols-[minmax(0,380px)_minmax(0,1fr)] md:items-start"
-                    >
-                      <div
-                        className={
-                          imageFirst
-                            ? "order-1"
-                            : "order-1 md:order-2"
-                        }
-                      >
-                        <div className="overflow-hidden border border-[#bbbbbb] bg-[#d6d6d6]">
-                          {section.image ? (
-                            <img
-                              src={section.image}
-                              alt={section.title || `Section ${index + 1}`}
-                              className="h-[250px] w-full object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-[250px] items-center justify-center text-sm text-gray-600">
-                              Imagen de la seccion
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div
-                        className={
-                          imageFirst
-                            ? "order-2"
-                            : "order-2 md:order-1"
-                        }
-                      >
-                        <h3 className="text-[30px] font-semibold leading-tight text-[#1e3f8f] sm:text-[44px]">
-                          {section.title || "Titulo de la seccion"}
-                        </h3>
-                        <div className="mt-4 space-y-4">
-                          {textBlocks.map((block, blockIndex) => (
-                            <p
-                              key={blockIndex}
-                              className="text-[17px] leading-7 text-[#2f2f2f]"
-                            >
-                              {block}
-                            </p>
-                          ))}
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            </section>
-          </div>
-        </div>
-      </Modal>
     </>
   );
 }
-
-
-

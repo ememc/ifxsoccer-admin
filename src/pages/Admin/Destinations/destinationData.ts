@@ -1,318 +1,482 @@
-export interface DestinationSection {
-  id: string;
-  title: string;
-  text: string;
-  image: string;
+import { URL_API_BASE } from "../../../config/api";
+import { generateGuid } from "../../../utils/guid";
+
+export interface DestinationHero {
+  image_text: string;
+  image_url: string;
 }
 
-export interface DestinationHeroSlide {
-  id: string;
-  image: string;
-  caption: string;
-  applyNowUrl: string;
+export interface DestinationSection {
+  section_image: string;
+  section_order: string;
+  section_text: string;
+  section_title: string;
+}
+
+export interface DestinationCity {
+  city_image: string;
+  city_order: string;
+  city_text: string;
+  city_title: string;
+}
+
+export interface DestinationAcademy {
+  academy_image: string;
+  academy_order: string;
+  academy_text: string;
+  academy_title: string;
+  academy_target: string;
 }
 
 export interface Destination {
-  id: string;
-  title: string;
-  mainImage: string;
-  heroImages: DestinationHeroSlide[];
-  primaryHeroImageId: string;
-  mainText: string;
-  learnMoreUrl: string;
-  applyOnlineUrl: string;
-  enabled: 0 | 1;
-  sections: DestinationSection[];
+  destination_id: string;
+  destination_category: string;
+  destination_date: string;
+  destination_title: string;
+  destination_description: string;
+  destination_hero: DestinationHero[];
+  destination_section: DestinationSection[];
+  destination_cities: DestinationCity[];
+  destination_academies: DestinationAcademy[];
+  destination_state: string | number | boolean;
+  destination_tags: string;
+  destination_text: string;
 }
 
-const STORAGE_KEY = "ifx-admin-destinations";
+interface ApiDestination {
+  destination_id?: unknown;
+  destination_category?: unknown;
+  destination_date?: unknown;
+  destination_title?: unknown;
+  destination_description?: unknown;
+  destination_hero?: unknown;
+  destination_section?: unknown;
+  destination_cities?: unknown;
+  destination_academies?: unknown;
+  destination_state?: unknown;
+  destination_tags?: unknown;
+  destination_text?: unknown;
+}
 
-const seedDestinations: Destination[] = [
-  {
-    id: "high-performance",
-    title: "High Performance Destination",
-    mainImage:
-      "https://images.unsplash.com/photo-1547347298-4074fc3086f0?auto=format&fit=crop&w=1200&q=80",
-    heroImages: [
-      {
-        id: "high-performance-hero-1",
-        image:
-          "https://images.unsplash.com/photo-1547347298-4074fc3086f0?auto=format&fit=crop&w=1200&q=80",
-        caption: "YOU COULD BE NEXT!",
-        applyNowUrl: "https://ifxsoccer.com/apply/high-performance",
-      },
-      {
-        id: "high-performance-hero-2",
-        image:
-          "https://images.unsplash.com/photo-1518604666860-9ed391f76460?auto=format&fit=crop&w=1200&q=80",
-        caption: "SHOWCASE YOUR TALENT",
-        applyNowUrl: "https://ifxsoccer.com/apply/high-performance",
-      },
-      {
-        id: "high-performance-hero-3",
-        image:
-          "https://images.unsplash.com/photo-1471295253337-3ceaaedca402?auto=format&fit=crop&w=1200&q=80",
-        caption: "YOU COULD BE NEXT!",
-        applyNowUrl: "https://ifxsoccer.com/apply/high-performance",
-      },
-    ],
-    primaryHeroImageId: "high-performance-hero-1",
-    mainText:
-      "Programa enfocado en jugadores que buscan una ruta competitiva con entrenamiento, seguimiento y visibilidad.",
-    learnMoreUrl: "https://ifxsoccer.com/programs/high-performance",
-    applyOnlineUrl: "https://ifxsoccer.com/apply/high-performance",
-    enabled: 1,
-    sections: [
-      {
-        id: "high-performance-1",
-        title: "Entrenamiento Integral",
-        text: "Sesiones tecnicas, tacticas y fisicas disenadas para acelerar el desarrollo competitivo del jugador.",
-        image:
-          "https://images.unsplash.com/photo-1575361204480-aadea25e6e68?auto=format&fit=crop&w=1200&q=80",
-      },
-      {
-        id: "high-performance-2",
-        title: "Exposicion y Seguimiento",
-        text: "Acompanamiento del proceso con reportes, material visual y una estructura lista para escalar cuando el API este disponible.",
-        image:
-          "https://images.unsplash.com/photo-1517466787929-bc90951d0974?auto=format&fit=crop&w=1200&q=80",
-      },
-    ],
-  },
-  {
-    id: "summer-camp",
-    title: "Summer Camp",
-    mainImage:
-      "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1200&q=80",
-    heroImages: [
-      {
-        id: "summer-camp-hero-1",
-        image:
-          "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1200&q=80",
-        caption: "YOU COULD BE NEXT!",
-        applyNowUrl: "https://ifxsoccer.com/apply/summer-camp",
-      },
-      {
-        id: "summer-camp-hero-2",
-        image:
-          "https://images.unsplash.com/photo-1508098682722-e99c643e7485?auto=format&fit=crop&w=1200&q=80",
-        caption: "SHOWCASE YOUR TALENT",
-        applyNowUrl: "https://ifxsoccer.com/apply/summer-camp",
-      },
-    ],
-    primaryHeroImageId: "summer-camp-hero-1",
-    mainText:
-      "Experiencia intensiva para combinar entrenamiento, formacion personal y actividades complementarias.",
-    learnMoreUrl: "https://ifxsoccer.com/programs/summer-camp",
-    applyOnlineUrl: "https://ifxsoccer.com/apply/summer-camp",
-    enabled: 0,
-    sections: [
-      {
-        id: "summer-camp-1",
-        title: "Metodologia Diaria",
-        text: "Bloques estructurados para tecnica, toma de decisiones y contextos reales de juego.",
-        image:
-          "https://images.unsplash.com/photo-1508098682722-e99c643e7485?auto=format&fit=crop&w=1200&q=80",
-      },
-    ],
-  },
-];
+interface IndexedDestination extends Destination {
+  sourceIndex: number;
+}
 
-const cloneDestinations = (programs: Destination[]): Destination[] =>
-  programs.map((Destination) => ({
-    ...Destination,
-    heroImages: Destination.heroImages.map((slide) => ({ ...slide })),
-    sections: Destination.sections.map((section) => ({ ...section })),
-  }));
+export const DESTINATIONS_API_URL = `${URL_API_BASE.replace(/\/+$/, "")}/destination/`;
 
-const normalizeHeroSlides = (
-  heroImages: unknown,
-  mainImage: string,
-  applyOnlineUrl: string
-): DestinationHeroSlide[] => {
-  if (!Array.isArray(heroImages)) {
-    if (!mainImage) {
-      return [];
-    }
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
 
-    return [
-      {
-        id: `hero-${Date.now()}-0`,
-        image: mainImage,
-        caption: "YOU COULD BE NEXT!",
-        applyNowUrl: applyOnlineUrl,
-      },
-    ];
-  }
-
-  if (heroImages.length === 0) {
-    return mainImage
-      ? [
-          {
-            id: `hero-${Date.now()}-0`,
-            image: mainImage,
-            caption: "YOU COULD BE NEXT!",
-            applyNowUrl: applyOnlineUrl,
-          },
-        ]
-      : [];
-  }
-
-  return heroImages
-    .map((slide, index) => {
-      if (typeof slide === "string") {
-        const image = slide.trim();
-        if (!image) {
-          return null;
-        }
-
-        return {
-          id: `hero-${Date.now()}-${index}`,
-          image,
-          caption: "YOU COULD BE NEXT!",
-          applyNowUrl: applyOnlineUrl,
-        };
-      }
-
-      if (!slide || typeof slide !== "object") {
-        return null;
-      }
-
-      const raw = slide as Record<string, unknown>;
-      const image = String(raw.image ?? "").trim();
-      if (!image) {
-        return null;
-      }
-
-      return {
-        id: String(raw.id ?? `hero-${Date.now()}-${index}`),
-        image,
-        caption: String(raw.caption ?? "YOU COULD BE NEXT!"),
-        applyNowUrl: String(raw.applyNowUrl ?? applyOnlineUrl),
-      };
-    })
-    .filter((slide): slide is DestinationHeroSlide => Boolean(slide));
+const readJsonResponse = async (response: Response): Promise<unknown> => {
+  const text = await response.text();
+  return text ? JSON.parse(text) : null;
 };
 
-export const loadDestinations = (): Destination[] => {
-  if (typeof window === "undefined") {
-    return cloneDestinations(seedDestinations);
+const parseApiBody = (payload: unknown): unknown => {
+  if (!isRecord(payload) || !("body" in payload)) {
+    return payload;
   }
 
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    const initial = cloneDestinations(seedDestinations);
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
-    return initial;
+  const { body } = payload;
+  return typeof body === "string" ? (body ? JSON.parse(body) : null) : body;
+};
+
+const assertSuccessfulApiPayload = (payload: unknown) => {
+  const statusCode = isRecord(payload) ? Number(payload.statusCode) : Number.NaN;
+
+  if (isRecord(payload) && Number.isFinite(statusCode) && statusCode >= 400) {
+    const bodyPayload = parseApiBody(payload);
+    const message =
+      isRecord(bodyPayload) && typeof bodyPayload.message === "string"
+        ? bodyPayload.message
+        : `Error ${statusCode}`;
+
+    throw new Error(message);
   }
+};
+
+const unwrapDynamoObject = (value: Record<string, unknown>): Record<string, unknown> =>
+  Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [key, unwrapDynamoValue(entry)])
+  );
+
+const unwrapDynamoValue = (value: unknown): unknown => {
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  if ("S" in value) {
+    return value.S;
+  }
+
+  if ("N" in value) {
+    return value.N;
+  }
+
+  if ("BOOL" in value) {
+    return value.BOOL;
+  }
+
+  if ("NULL" in value) {
+    return null;
+  }
+
+  if ("L" in value && Array.isArray(value.L)) {
+    return value.L.map(unwrapDynamoValue);
+  }
+
+  if ("M" in value && isRecord(value.M)) {
+    return unwrapDynamoObject(value.M);
+  }
+
+  return value;
+};
+
+const normalizeApiDate = (value: unknown): string => {
+  const date = String(unwrapDynamoValue(value) ?? "");
+  const dayMonthYear = date.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+
+  if (!dayMonthYear) {
+    return date;
+  }
+
+  return `${dayMonthYear[3]}-${dayMonthYear[2]}-${dayMonthYear[1]}`;
+};
+
+export const normalizeEnabled = (value: Destination["destination_state"]): 0 | 1 => {
+  const enabled = unwrapDynamoValue(value);
+
+  if (
+    enabled === 1 ||
+    enabled === true ||
+    enabled === "1" ||
+    String(enabled).toLowerCase() === "true"
+  ) {
+    return 1;
+  }
+
+  return 0;
+};
+
+const stringValue = (value: unknown): string => String(unwrapDynamoValue(value) ?? "");
+
+const normalizeArray = <T,>(
+  value: unknown,
+  mapper: (item: Record<string, unknown>) => T
+): T[] => {
+  const unwrapped = unwrapDynamoValue(value);
+
+  if (!Array.isArray(unwrapped)) {
+    return [];
+  }
+
+  return unwrapped.map((item) => {
+    const raw = unwrapDynamoValue(item);
+    return mapper(isRecord(raw) ? raw : {});
+  });
+};
+
+const extractApiDestinations = (payload: unknown): ApiDestination[] => {
+  const bodyPayload = parseApiBody(payload);
+
+  if (Array.isArray(bodyPayload)) {
+    return bodyPayload as ApiDestination[];
+  }
+
+  if (isRecord(bodyPayload) && Array.isArray(bodyPayload.destination)) {
+    return bodyPayload.destination as ApiDestination[];
+  }
+
+  if (isRecord(bodyPayload) && isRecord(bodyPayload.destination)) {
+    return [bodyPayload.destination as ApiDestination];
+  }
+
+  if (isRecord(bodyPayload) && Array.isArray(bodyPayload.destinations)) {
+    return bodyPayload.destinations as ApiDestination[];
+  }
+
+  if (isRecord(bodyPayload) && Array.isArray(bodyPayload.items)) {
+    return bodyPayload.items as ApiDestination[];
+  }
+
+  if (isRecord(bodyPayload) && Array.isArray(bodyPayload.Items)) {
+    return bodyPayload.Items as ApiDestination[];
+  }
+
+  if (isRecord(bodyPayload) && isRecord(bodyPayload.item)) {
+    return [bodyPayload.item as ApiDestination];
+  }
+
+  if (isRecord(bodyPayload) && isRecord(bodyPayload.Item)) {
+    return [bodyPayload.Item as ApiDestination];
+  }
+
+  if (isRecord(bodyPayload) && isRecord(bodyPayload.data)) {
+    return [bodyPayload.data as ApiDestination];
+  }
+
+  if (isRecord(payload) && Array.isArray(payload.destination)) {
+    return payload.destination as ApiDestination[];
+  }
+
+  if (isRecord(payload) && isRecord(payload.destination)) {
+    return [payload.destination as ApiDestination];
+  }
+
+  if (isRecord(payload) && Array.isArray(payload.destinations)) {
+    return payload.destinations as ApiDestination[];
+  }
+
+  return [];
+};
+
+const toApiDestinationBody = (destination: Destination): ApiDestination => ({
+  destination_id: destination.destination_id,
+  destination_category: destination.destination_category,
+  destination_date: destination.destination_date,
+  destination_title: destination.destination_title,
+  destination_description: destination.destination_description,
+  destination_hero: destination.destination_hero,
+  destination_section: destination.destination_section,
+  destination_cities: destination.destination_cities,
+  destination_academies: destination.destination_academies,
+  destination_state: normalizeEnabled(destination.destination_state) === 1,
+  destination_tags: destination.destination_tags,
+  destination_text: destination.destination_text,
+});
+
+const toDestinationMutationEvent = (
+  httpMethod: "POST" | "PUT",
+  destination: Destination
+) => ({
+  httpMethod,
+  pathParameters: {
+    destination_id: destination.destination_id,
+  },
+  body: JSON.stringify(toApiDestinationBody(destination)),
+});
+
+const isCorsLikeFailure = (error: unknown): boolean =>
+  error instanceof TypeError && /fetch|network|failed/i.test(error.message);
+
+const postDestinationMutationEvent = async (
+  mutationEvent: ReturnType<typeof toDestinationMutationEvent>
+): Promise<unknown | null> => {
+  const requestBody = JSON.stringify(mutationEvent);
 
   try {
-    const parsed = JSON.parse(raw) as Array<Record<string, unknown>>;
-    if (!Array.isArray(parsed)) {
-      throw new Error("Invalid destinations payload");
+    const response = await fetch(DESTINATIONS_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: requestBody,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error ${response.status}`);
     }
 
-    return parsed.map((Destination) => ({
-      id: String(Destination.id),
-      title: String(Destination.title ?? ""),
-      mainImage: String(Destination.mainImage ?? ""),
-      heroImages: normalizeHeroSlides(
-        Destination.heroImages,
-        String(Destination.mainImage ?? ""),
-        String(Destination.applyOnlineUrl ?? "")
-      ),
-      primaryHeroImageId: String(Destination.primaryHeroImageId ?? ""),
-      mainText: String(Destination.mainText ?? ""),
-      learnMoreUrl: String(Destination.learnMoreUrl ?? ""),
-      applyOnlineUrl: String(Destination.applyOnlineUrl ?? ""),
-      enabled: Destination.enabled === 1 ? (1 as const) : (0 as const),
-      sections: Array.isArray(Destination.sections)
-        ? Destination.sections.map((section) => ({
-            id: String(section.id),
-            title: String(section.title ?? ""),
-            text: String(section.text ?? ""),
-            image: String(section.image ?? ""),
-          }))
-        : [],
-    })).map((Destination) => {
-      const legacyPrimaryImage = String(
-        (Destination as unknown as Record<string, unknown>).primaryHeroImage ?? ""
-      );
-      const primaryByLegacyImage = Destination.heroImages.find(
-        (slide) => slide.image === legacyPrimaryImage
-      );
-      const fallbackPrimaryId =
-        Destination.primaryHeroImageId ||
-        primaryByLegacyImage?.id ||
-        Destination.heroImages[0]?.id ||
-        "";
-      const primarySlide =
-        Destination.heroImages.find((slide) => slide.id === fallbackPrimaryId) ??
-        Destination.heroImages[0];
+    const payload = await readJsonResponse(response);
+    assertSuccessfulApiPayload(payload);
+    return payload;
+  } catch (error) {
+    if (!isCorsLikeFailure(error)) {
+      throw error;
+    }
 
-      return {
-        ...Destination,
-        primaryHeroImageId: primarySlide?.id ?? "",
-        mainImage: primarySlide?.image ?? "",
-      };
+    await fetch(DESTINATIONS_API_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: {
+        "Content-Type": "text/plain;charset=UTF-8",
+      },
+      body: requestBody,
     });
+
+    return null;
+  }
+};
+
+export const parseDestinationsResponse = (payload: unknown): Destination[] => {
+  const indexedDestinations: IndexedDestination[] = extractApiDestinations(payload).map(
+    (destination, sourceIndex) => ({
+      destination_id: stringValue(destination.destination_id || `destination-${sourceIndex}`),
+      destination_category: stringValue(destination.destination_category),
+      destination_date: normalizeApiDate(destination.destination_date),
+      destination_title: stringValue(destination.destination_title),
+      destination_description: stringValue(destination.destination_description),
+      destination_hero: normalizeArray(destination.destination_hero, (item) => ({
+        image_text: stringValue(item.image_text),
+        image_url: stringValue(item.image_url),
+      })),
+      destination_section: normalizeArray(destination.destination_section, (item) => ({
+        section_image: stringValue(item.section_image),
+        section_order: stringValue(item.section_order),
+        section_text: stringValue(item.section_text),
+        section_title: stringValue(item.section_title),
+      })),
+      destination_cities: normalizeArray(destination.destination_cities, (item) => ({
+        city_image: stringValue(item.city_image),
+        city_order: stringValue(item.city_order),
+        city_text: stringValue(item.city_text),
+        city_title: stringValue(item.city_title),
+      })),
+      destination_academies: normalizeArray(destination.destination_academies, (item) => ({
+        academy_image: stringValue(item.academy_image),
+        academy_order: stringValue(item.academy_order),
+        academy_text: stringValue(item.academy_text),
+        academy_title: stringValue(item.academy_title),
+        academy_target: stringValue(item.academy_target),
+      })),
+      destination_state: unwrapDynamoValue(destination.destination_state) as Destination["destination_state"],
+      destination_tags: stringValue(destination.destination_tags),
+      destination_text: stringValue(destination.destination_text),
+      sourceIndex,
+    })
+  );
+
+  return indexedDestinations
+    .sort((first, second) => {
+      if (first.destination_date !== second.destination_date) {
+        return second.destination_date.localeCompare(first.destination_date);
+      }
+
+      return first.sourceIndex - second.sourceIndex;
+    })
+    .map(({ sourceIndex: _sourceIndex, ...destination }) => destination);
+};
+
+const parseDestinationResponse = (payload: unknown, fallback: Destination): Destination => {
+  const destinations = parseDestinationsResponse(payload);
+  return (
+    destinations.find(
+      (destination) => destination.destination_id === fallback.destination_id
+    ) ??
+    destinations[0] ??
+    fallback
+  );
+};
+
+const isFallbackDestination = (destination: Destination, fallback: Destination): boolean =>
+  JSON.stringify(destination) === JSON.stringify(fallback);
+
+export const fetchDestinations = async (): Promise<Destination[]> => {
+  const response = await fetch(DESTINATIONS_API_URL);
+
+  if (!response.ok) {
+    throw new Error(`Error ${response.status}`);
+  }
+
+  const payload = await readJsonResponse(response);
+  assertSuccessfulApiPayload(payload);
+
+  return parseDestinationsResponse(payload);
+};
+
+export const fetchDestination = async (id: string): Promise<Destination> => {
+  const fallback = createEmptyDestination(id);
+
+  try {
+    const response = await fetch(DESTINATIONS_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        httpMethod: "GET",
+        pathParameters: {
+          destination_id: id,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error ${response.status}`);
+    }
+
+    const payload = await readJsonResponse(response);
+    assertSuccessfulApiPayload(payload);
+
+    const destination = parseDestinationResponse(payload, fallback);
+    if (!isFallbackDestination(destination, fallback)) {
+      return destination;
+    }
   } catch {
-    const initial = cloneDestinations(seedDestinations);
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
-    return initial;
-  }
-};
-
-export const saveDestinations = (programs: Destination[]) => {
-  if (typeof window === "undefined") {
-    return;
+    // If single-item GET is not available for destinations, try the list endpoint below.
   }
 
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(programs));
+  const destinations = await fetchDestinations();
+  return (
+    destinations.find((destination) => destination.destination_id === id) ?? fallback
+  );
 };
 
-export const upsertDestination = (Destination: Destination) => {
-  const programs = loadDestinations();
-  const index = programs.findIndex((item) => item.id === Destination.id);
-
-  if (index >= 0) {
-    programs[index] = Destination;
-  } else {
-    programs.unshift(Destination);
-  }
-
-  saveDestinations(programs);
+export const updateDestination = async (
+  destination: Destination
+): Promise<Destination> => {
+  const payload = await postDestinationMutationEvent(
+    toDestinationMutationEvent("PUT", destination)
+  );
+  return payload ? parseDestinationResponse(payload, destination) : destination;
 };
 
-export const removeDestination = (id: string) => {
-  const programs = loadDestinations().filter((Destination) => Destination.id !== id);
-  saveDestinations(programs);
+export const createDestination = async (
+  destination: Destination
+): Promise<Destination> => {
+  const destinationToCreate = {
+    ...destination,
+    destination_id: destination.destination_id || generateGuid(),
+  };
+
+  const payload = await postDestinationMutationEvent(
+    toDestinationMutationEvent("POST", destinationToCreate)
+  );
+  return payload
+    ? parseDestinationResponse(payload, destinationToCreate)
+    : destinationToCreate;
 };
+
+export const createEmptyDestinationHero = (): DestinationHero => ({
+  image_text: "",
+  image_url: "",
+});
 
 export const createEmptyDestinationSection = (index: number): DestinationSection => ({
-  id: `section-${Date.now()}-${index}`,
-  title: "",
-  text: "",
-  image: "",
+  section_image: "",
+  section_order: String(index + 1),
+  section_text: "",
+  section_title: "",
 });
 
-export const createEmptyDestinationHeroSlide = (index: number): DestinationHeroSlide => ({
-  id: `hero-${Date.now()}-${index}`,
-  image: "",
-  caption: "YOU COULD BE NEXT!",
-  applyNowUrl: "",
+export const createEmptyDestinationCity = (index: number): DestinationCity => ({
+  city_image: "",
+  city_order: String(index + 1),
+  city_text: "",
+  city_title: "",
 });
 
-export const createEmptyDestination = (): Destination => ({
-  id: `destination-${Date.now()}`,
-  title: "",
-  mainImage: "",
-  heroImages: [],
-  primaryHeroImageId: "",
-  mainText: "",
-  learnMoreUrl: "",
-  applyOnlineUrl: "",
-  enabled: 1,
-  sections: [createEmptyDestinationSection(0)],
+export const createEmptyDestinationAcademy = (
+  index: number
+): DestinationAcademy => ({
+  academy_image: "",
+  academy_order: String(index + 1),
+  academy_text: "",
+  academy_title: "",
+  academy_target: "",
 });
 
+export const createEmptyDestination = (id = generateGuid()): Destination => ({
+  destination_id: id,
+  destination_category: "",
+  destination_date: "",
+  destination_title: "",
+  destination_description: "",
+  destination_hero: [createEmptyDestinationHero()],
+  destination_section: [createEmptyDestinationSection(0)],
+  destination_cities: [createEmptyDestinationCity(0)],
+  destination_academies: [createEmptyDestinationAcademy(0)],
+  destination_state: true,
+  destination_tags: "",
+  destination_text: "",
+});

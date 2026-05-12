@@ -4,7 +4,6 @@ import Badge from "../../../components/ui/badge/Badge";
 import PageBreadcrumb from "../../../components/common/PageBreadCrumb";
 import ComponentCard from "../../../components/common/ComponentCard";
 import PageMeta from "../../../components/common/PageMeta";
-import Input from "../../../components/form/input/InputField";
 import Button from "../../../components/ui/button/Button";
 import {
   Table,
@@ -13,22 +12,33 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
-import {
-  Destination,
-  createEmptyDestination,
-  loadDestinations,
-  removeDestination,
-  upsertDestination,
-} from "./destinationData";
+import { resolveS3ImageUrl } from "../../../utils/s3Image";
+import { fetchDestinations, normalizeEnabled } from "./destinationData";
+import type { Destination } from "./destinationData";
 
 export default function DestinationsList() {
   const navigate = useNavigate();
   const [data, setData] = useState<Destination[]>([]);
-  const [newDestinationTitle, setNewDestinationTitle] = useState("");
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refreshData = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const destinations = await fetchDestinations();
+      setData(destinations);
+    } catch {
+      setData([]);
+      setError("No se pudieron cargar los destinos del API.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    setData(loadDestinations());
+    void refreshData();
   }, []);
 
   const onEdit = (id: string) => {
@@ -39,60 +49,12 @@ export default function DestinationsList() {
     navigate("/destinations/new");
   };
 
-  const onDelete = (id: string) => {
-    const confirmed = window.confirm("Deseas borrar este destino?");
-    if (!confirmed) {
-      return;
-    }
-
-    removeDestination(id);
-    setData(loadDestinations());
-  };
-
-  const onQuickSave = () => {
-    const title = newDestinationTitle.trim();
-    if (!title) {
-      setSaveMessage("Escribe un Destination Title antes de guardar.");
-      return;
-    }
-
-    const destination = createEmptyDestination();
-    destination.title = title;
-    upsertDestination(destination);
-    setData(loadDestinations());
-    setNewDestinationTitle("");
-    setSaveMessage("Destination guardado.");
-  };
-
   return (
     <>
       <PageMeta title="Destinations List" description="Destinations List" />
       <PageBreadcrumb pageTitle="Destinations List" />
       <div className="space-y-6">
         <ComponentCard title="Destinations">
-          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-            <div className="min-w-[260px] flex-1">
-              <label
-                htmlFor="destination-title-quick-save"
-                className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200"
-              >
-                Destination Title
-              </label>
-              <Input
-                id="destination-title-quick-save"
-                value={newDestinationTitle}
-                onChange={(e) => {
-                  setNewDestinationTitle(e.target.value);
-                  setSaveMessage(null);
-                }}
-                placeholder="Write the Destination title"
-              />
-            </div>
-            <Button onClick={onQuickSave}>Save Destination</Button>
-          </div>
-          {saveMessage && (
-            <p className="mb-3 text-sm text-gray-600 dark:text-gray-300">{saveMessage}</p>
-          )}
           <div className="mb-4 flex items-center justify-end">
             <Button onClick={onCreate}>New Destination</Button>
           </div>
@@ -108,56 +70,114 @@ export default function DestinationsList() {
                       Title
                     </TableCell>
                     <TableCell isHeader className="px-5 py-3 text-start">
-                      Status
+                      Category
                     </TableCell>
                     <TableCell isHeader className="px-5 py-3 text-start">
-                      Edit
+                      Date
+                    </TableCell>
+                    <TableCell isHeader className="px-5 py-3 text-start">
+                      Enabled
+                    </TableCell>
+                    <TableCell isHeader className="px-5 py-3 text-start">
+                      Actions
                     </TableCell>
                   </TableRow>
                 </TableHeader>
                 <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
-                  {data.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="px-5 py-4">
-                        {item.mainImage ? (
-                          <div className="h-10 w-10 overflow-hidden rounded-md">
-                            <img
-                              src={item.mainImage}
-                              alt={item.title}
-                              className="h-full w-full object-cover"
-                            />
-                          </div>
-                        ) : (
-                          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-gray-100 text-xs text-gray-400 dark:bg-gray-800">
-                            N/A
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell className="px-5 py-4">{item.title}</TableCell>
-                      <TableCell className="px-4 py-3">
-                        <Badge
-                          size="sm"
-                          color={item.enabled === 1 ? "success" : "error"}
-                        >
-                          {item.enabled === 1 ? "Enabled" : "Disabled"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="px-4 py-3">
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onEdit(item.id)}
-                          >
-                            Edit
-                          </Button>
-                          <Button size="sm" onClick={() => onDelete(item.id)}>
-                            Delete
-                          </Button>
-                        </div>
-                      </TableCell>
+                  {loading && (
+                    <TableRow>
+                      <td
+                        colSpan={6}
+                        className="px-5 py-6 text-center text-sm text-gray-500 dark:text-gray-400"
+                      >
+                        Cargando destinos...
+                      </td>
                     </TableRow>
-                  ))}
+                  )}
+
+                  {!loading && error && (
+                    <TableRow>
+                      <td
+                        colSpan={6}
+                        className="px-5 py-6 text-center text-sm text-error-600 dark:text-error-400"
+                      >
+                        {error}
+                      </td>
+                    </TableRow>
+                  )}
+
+                  {!loading && !error && data.length === 0 && (
+                    <TableRow>
+                      <td
+                        colSpan={6}
+                        className="px-5 py-6 text-center text-sm text-gray-500 dark:text-gray-400"
+                      >
+                        No hay destinos para mostrar.
+                      </td>
+                    </TableRow>
+                  )}
+
+                  {!loading &&
+                    !error &&
+                    data.map((item) => {
+                      const mainImage = resolveS3ImageUrl(
+                        item.destination_hero[0]?.image_url ||
+                          item.destination_section[0]?.section_image ||
+                          item.destination_cities[0]?.city_image ||
+                          item.destination_academies[0]?.academy_image
+                      );
+                      const enabled = normalizeEnabled(item.destination_state) === 1;
+
+                      return (
+                        <TableRow key={item.destination_id}>
+                          <TableCell className="px-5 py-4">
+                            {mainImage ? (
+                              <div className="h-14 w-24 overflow-hidden rounded-md">
+                                <img
+                                  src={mainImage}
+                                  alt={item.destination_title}
+                                  className="h-full w-full object-cover"
+                                  onError={(event) => {
+                                    event.currentTarget.src = "/images/logo/ifx-logo.png";
+                                  }}
+                                />
+                              </div>
+                            ) : (
+                              <div className="flex h-14 w-24 items-center justify-center rounded-md bg-gray-100 text-xs text-gray-400 dark:bg-gray-800">
+                                N/A
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell className="px-5 py-4">
+                            {item.destination_title}
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
+                            {item.destination_category}
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
+                            <span className="text-sm text-gray-600 dark:text-gray-300">
+                              {item.destination_date}
+                            </span>
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
+                            <Badge size="sm" color={enabled ? "success" : "error"}>
+                              {enabled ? "Enabled" : "Disabled"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => onEdit(item.destination_id)}
+                              >
+                                Edit
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                 </TableBody>
               </Table>
             </div>
@@ -167,4 +187,3 @@ export default function DestinationsList() {
     </>
   );
 }
-
