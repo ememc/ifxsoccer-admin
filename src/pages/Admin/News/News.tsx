@@ -322,6 +322,7 @@ export default function News() {
   const safeNews = news ?? createEmptyNews(decodedId === "new" ? undefined : decodedId || undefined);
   const previewDate = useMemo(() => formatPreviewDate(safeNews.date), [safeNews.date]);
   const previewTitle = getNewsDisplayTitle(safeNews);
+  const previewDescription = safeNews.description.trim();
   const previewHtml = sanitizeRichHtml(
     safeNews.text || "<p>El texto enriquecido de la noticia aparecera aqui.</p>"
   );
@@ -423,14 +424,53 @@ export default function News() {
                 Main News Content
               </h3>
               <span className="rounded-md bg-[#dce6fb] px-2 py-1 text-xs font-semibold text-[#234487] dark:bg-[#1a2b54] dark:text-[#b6c7ef]">
-                Principal
+                Main
               </span>
             </div>
 
             <div className="space-y-6">
               <div className="grid gap-6 lg:grid-cols-2">
                 <div>
-                  <Label htmlFor="news-date">Fecha</Label>
+                  <Label htmlFor="news-title">Title</Label>
+                  <Input
+                    id="news-title"
+                    value={safeNews.title}
+                    onChange={(e) => updateNews({ title: e.target.value })}
+                    placeholder="Title of the news"
+                  />
+                </div>
+                <div>
+                  <Label>Main News</Label>
+                  <div className="flex gap-2">
+                    <Button
+                      variant={safeNews.principal === 1 ? "primary" : "outline"}
+                      onClick={() => updateNews({ principal: 1 })}
+                    >
+                      Yes
+                    </Button>
+                    <Button
+                      variant={safeNews.principal === 0 ? "primary" : "outline"}
+                      onClick={() => updateNews({ principal: 0 })}
+                    >
+                      No
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="news-description">Description</Label>
+                <Input
+                  id="news-description"
+                  value={safeNews.description}
+                  onChange={(e) => updateNews({ description: e.target.value })}
+                  placeholder="Brief description of the news"
+                />
+              </div>
+
+              <div className="grid gap-6 lg:grid-cols-2">
+                <div>
+                  <Label htmlFor="news-date">Date</Label>
                   <Input
                     id="news-date"
                     type="date"
@@ -459,7 +499,7 @@ export default function News() {
 
               <div className="grid gap-6 lg:grid-cols-2">
                 <div>
-                  <Label htmlFor="news-state">Estado</Label>
+                  <Label htmlFor="news-state">State</Label>
                   <Input
                     id="news-state"
                     value={safeNews.state}
@@ -468,12 +508,12 @@ export default function News() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="news-category">Categoria</Label>
+                  <Label htmlFor="news-category">Category</Label>
                   <Input
                     id="news-category"
                     value={safeNews.category}
                     onChange={(e) => updateNews({ category: e.target.value })}
-                    placeholder="Categoria"
+                    placeholder="Category"
                   />
                 </div>
               </div>
@@ -485,7 +525,7 @@ export default function News() {
                     id="news-program-by"
                     value={safeNews.programBy}
                     onChange={(e) => updateNews({ programBy: e.target.value })}
-                    placeholder="Programa o autor"
+                    placeholder="Program or author"
                   />
                 </div>
                 <div>
@@ -500,7 +540,7 @@ export default function News() {
               </div>
 
               <div>
-                <Label htmlFor="news-image">Imagen principal</Label>
+                <Label htmlFor="news-image">News Image</Label>
                 <Input
                   id="news-image"
                   value={safeNews.image}
@@ -510,7 +550,7 @@ export default function News() {
               </div>
 
               <div>
-                <Label>Biblioteca S3 Imagen Principal</Label>
+                <Label>Biblioteca S3 News Image</Label>
                 <S3ImageManager
                   selectedUrl={safeNews.image}
                   onSelect={(url) => updateNews({ image: url })}
@@ -536,12 +576,30 @@ export default function News() {
             <article className="space-y-5 px-5 py-6 sm:px-8 sm:py-8">
               <p className="text-[14px] text-[#4a4a4a]">Posted On {previewDate}</p>
 
+              <div className="space-y-2">
+                <h1 className="text-[34px] font-semibold leading-tight text-[#1d3570]">
+                  {previewTitle}
+                </h1>
+                {previewDescription && (
+                  <p className="text-[18px] leading-7 text-[#4a4a4a]">
+                    {previewDescription}
+                  </p>
+                )}
+              </div>
+
               <div className="flex flex-wrap gap-2 text-xs uppercase tracking-wide text-white">
                 {safeNews.category && (
                   <span className="inline-flex min-w-[125px] items-center justify-center bg-[#3f4c96] px-4 py-2">
                     {safeNews.category}
                   </span>
                 )}
+                <span
+                  className={`inline-flex min-w-[125px] items-center justify-center px-4 py-2 ${
+                    safeNews.principal === 1 ? "bg-[#c27a2c]" : "bg-[#6b7280]"
+                  }`}
+                >
+                  {safeNews.principal === 1 ? "Principal" : "Secundaria"}
+                </span>
                 {safeNews.programBy && (
                   <span className="inline-flex min-w-[125px] items-center justify-center bg-[#2d9cdc] px-4 py-2">
                     {safeNews.programBy}

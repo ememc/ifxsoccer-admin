@@ -3,7 +3,10 @@ import { generateGuid } from "../../../utils/guid";
 
 export interface News {
   id: string;
+  title: string;
+  description: string;
   image: string;
+  principal: 0 | 1;
   date: string;
   state: string;
   enabled: 0 | 1;
@@ -16,13 +19,16 @@ export interface News {
 interface ApiNews {
   news_category?: unknown;
   news_date?: unknown;
+  news_description?: unknown;
   news_enabled?: unknown;
   news_id?: unknown;
   news_image?: unknown;
+  news_principal?: unknown;
   news_program_by?: unknown;
   news_state?: unknown;
   news_tags?: unknown;
   news_text?: unknown;
+  news_title?: unknown;
 }
 
 interface IndexedNewsItem extends News {
@@ -141,13 +147,16 @@ const extractApiNews = (payload: unknown): ApiNews[] => {
 const toApiNewsBody = (newsItem: News): ApiNews => ({
   news_category: newsItem.category,
   news_date: newsItem.date,
+  news_description: newsItem.description,
   news_enabled: newsItem.enabled === 1,
   news_id: newsItem.id,
   news_image: newsItem.image,
+  news_principal: newsItem.principal === 1,
   news_program_by: newsItem.programBy,
   news_state: newsItem.state,
   news_tags: newsItem.tags,
   news_text: newsItem.text,
+  news_title: newsItem.title,
 });
 
 const toNewsMutationEvent = (httpMethod: "POST" | "PUT", newsItem: News) => ({
@@ -245,7 +254,10 @@ const parseNewsResponse = (payload: unknown, fallback: News): News => {
 
 const isFallbackNews = (newsItem: News, fallback: News): boolean =>
   newsItem.id === fallback.id &&
+  newsItem.title === fallback.title &&
+  newsItem.description === fallback.description &&
   newsItem.image === fallback.image &&
+  newsItem.principal === fallback.principal &&
   newsItem.date === fallback.date &&
   newsItem.state === fallback.state &&
   newsItem.enabled === fallback.enabled &&
@@ -257,7 +269,10 @@ const isFallbackNews = (newsItem: News, fallback: News): boolean =>
 export const parseNewsListResponse = (payload: unknown): News[] => {
   const indexedNews: IndexedNewsItem[] = extractApiNews(payload).map((news, sourceIndex) => ({
     id: String(unwrapDynamoValue(news.news_id) ?? `news-${sourceIndex}`),
+    title: String(unwrapDynamoValue(news.news_title) ?? ""),
+    description: String(unwrapDynamoValue(news.news_description) ?? ""),
     image: String(unwrapDynamoValue(news.news_image) ?? ""),
+    principal: normalizeEnabled(news.news_principal),
     date: normalizeApiDate(news.news_date),
     state: String(unwrapDynamoValue(news.news_state) ?? ""),
     enabled: normalizeEnabled(news.news_enabled),
@@ -278,7 +293,10 @@ export const parseNewsListResponse = (payload: unknown): News[] => {
     })
     .map((news) => ({
       id: news.id,
+      title: news.title,
+      description: news.description,
       image: news.image,
+      principal: news.principal,
       date: news.date,
       state: news.state,
       enabled: news.enabled,
@@ -355,7 +373,10 @@ export const createNews = async (newsItem: News): Promise<News> => {
 
 export const createEmptyNews = (id = generateGuid()): News => ({
   id,
+  title: "",
+  description: "",
   image: "",
+  principal: 0,
   date: "",
   state: "",
   enabled: 1,
@@ -378,6 +399,10 @@ export const getNewsPlainText = (html: string): string => {
 };
 
 export const getNewsDisplayTitle = (newsItem: News): string => {
+  if (newsItem.title.trim()) {
+    return newsItem.title.trim();
+  }
+
   if (typeof document !== "undefined") {
     const template = document.createElement("template");
     template.innerHTML = newsItem.text;

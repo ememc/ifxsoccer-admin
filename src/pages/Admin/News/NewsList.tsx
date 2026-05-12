@@ -116,7 +116,8 @@ export default function NewsList() {
                   {!loading && !error && data.map((item) => {
                     const title = getNewsDisplayTitle(item);
                     const plainText = getNewsPlainText(item.text);
-                    const excerpt = plainText && plainText !== title ? plainText : item.tags;
+                    const excerpt =
+                      item.description || (plainText && plainText !== title ? plainText : item.tags);
 
                     return (
                       <TableRow key={item.id}>
