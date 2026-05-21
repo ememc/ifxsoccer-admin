@@ -93,7 +93,7 @@ interface IndexedProgram extends Program {
   sourceIndex: number;
 }
 
-export const PROGRAMS_API_URL = `${URL_API_BASE.replace(/\/+$/, "")}/programs/`;
+export const PROGRAMS_API_URL = `${URL_API_BASE.replace(/\/+$/, "")}/programs`;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -101,6 +101,31 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const readJsonResponse = async (response: Response): Promise<unknown> => {
   const text = await response.text();
   return text ? JSON.parse(text) : null;
+};
+
+const readErrorMessage = async (response: Response): Promise<string> => {
+  const text = await response.text();
+
+  if (!text) {
+    return `Error ${response.status}`;
+  }
+
+  try {
+    const payload = JSON.parse(text) as unknown;
+    const bodyPayload = parseApiBody(payload);
+
+    if (isRecord(bodyPayload) && typeof bodyPayload.message === "string") {
+      return bodyPayload.message;
+    }
+
+    if (isRecord(payload) && typeof payload.message === "string") {
+      return payload.message;
+    }
+  } catch {
+    return text;
+  }
+
+  return text;
 };
 
 const parseApiBody = (payload: unknown): unknown => {
@@ -279,25 +304,18 @@ const toApiProgramBody = (program: Program): ApiProgram => ({
   program_variations: program.program_variations,
 });
 
-const toProgramMutationEvent = (httpMethod: "POST" | "PUT", program: Program) => ({
-  httpMethod,
-  pathParameters: {
-    program_id: program.program_id,
-  },
-  body: JSON.stringify(toApiProgramBody(program)),
-});
-
 const isCorsLikeFailure = (error: unknown): boolean =>
   error instanceof TypeError && /fetch|network|failed/i.test(error.message);
 
-const postProgramMutationEvent = async (
-  mutationEvent: ReturnType<typeof toProgramMutationEvent>
+const sendProgramMutation = async (
+  method: "POST" | "PUT",
+  program: Program
 ): Promise<unknown | null> => {
-  const requestBody = JSON.stringify(mutationEvent);
+  const requestBody = JSON.stringify(toApiProgramBody(program));
 
   try {
     const response = await fetch(PROGRAMS_API_URL, {
-      method: "POST",
+      method,
       headers: {
         "Content-Type": "application/json",
       },
@@ -305,12 +323,11 @@ const postProgramMutationEvent = async (
     });
 
     if (!response.ok) {
-      throw new Error(`Error ${response.status}`);
+      throw new Error(await readErrorMessage(response));
     }
 
     const payload = await readJsonResponse(response);
     assertSuccessfulApiPayload(payload);
-
     return payload;
   } catch (error) {
     if (!isCorsLikeFailure(error)) {
@@ -318,7 +335,7 @@ const postProgramMutationEvent = async (
     }
 
     await fetch(PROGRAMS_API_URL, {
-      method: "POST",
+      method,
       mode: "no-cors",
       headers: {
         "Content-Type": "text/plain;charset=UTF-8",
@@ -397,9 +414,6 @@ const parseProgramResponse = (payload: unknown, fallback: Program): Program => {
   return programs.find((program) => program.program_id === fallback.program_id) ?? programs[0] ?? fallback;
 };
 
-const isFallbackProgram = (program: Program, fallback: Program): boolean =>
-  JSON.stringify(program) === JSON.stringify(fallback);
-
 export const fetchPrograms = async (): Promise<Program[]> => {
   const response = await fetch(PROGRAMS_API_URL);
 
@@ -414,43 +428,12 @@ export const fetchPrograms = async (): Promise<Program[]> => {
 };
 
 export const fetchProgram = async (id: string): Promise<Program> => {
-  const fallback = createEmptyProgram(id);
-
-  try {
-    const response = await fetch(PROGRAMS_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        httpMethod: "GET",
-        pathParameters: {
-          program_id: id,
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Error ${response.status}`);
-    }
-
-    const payload = await readJsonResponse(response);
-    assertSuccessfulApiPayload(payload);
-
-    const program = parseProgramResponse(payload, fallback);
-    if (!isFallbackProgram(program, fallback)) {
-      return program;
-    }
-  } catch {
-    // If single-item GET is not available for programs, try the list endpoint below.
-  }
-
   const programs = await fetchPrograms();
-  return programs.find((program) => program.program_id === id) ?? fallback;
+  return programs.find((program) => program.program_id === id) ?? createEmptyProgram(id);
 };
 
 export const updateProgram = async (program: Program): Promise<Program> => {
-  const payload = await postProgramMutationEvent(toProgramMutationEvent("PUT", program));
+  const payload = await sendProgramMutation("PUT", program);
   return payload ? parseProgramResponse(payload, program) : program;
 };
 
@@ -460,7 +443,7 @@ export const createProgram = async (program: Program): Promise<Program> => {
     program_id: program.program_id || generateGuid(),
   };
 
-  const payload = await postProgramMutationEvent(toProgramMutationEvent("POST", programToCreate));
+  const payload = await sendProgramMutation("POST", programToCreate);
   return payload ? parseProgramResponse(payload, programToCreate) : programToCreate;
 };
 

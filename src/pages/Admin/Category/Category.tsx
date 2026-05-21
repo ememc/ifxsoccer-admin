@@ -8,36 +8,45 @@ import Input from "../../../components/form/input/InputField";
 import TextArea from "../../../components/form/input/TextArea";
 import S3ImageManager from "../../../components/page/S3ImageManager";
 import Button from "../../../components/ui/button/Button";
-import { Modal } from "../../../components/ui/modal";
-import { useModal } from "../../../hooks/useModal";
+import { resolveS3ImageUrl } from "../../../utils/s3Image";
 import {
+  createCategory as createCategoryRequest,
   createEmptyCategory,
+  createEmptyCategoryAddon,
+  createEmptyCategoryDetail,
+  createEmptyCategoryHero,
+  createEmptyCategoryInformation,
+  createEmptyCategoryPlayer,
   createEmptyCategorySection,
-  loadCategories,
-  upsertCategory,
+  createEmptyCategoryVariation,
+  fetchCategory,
+  normalizeEnabled,
+  updateCategory as updateCategoryRequest,
 } from "./categoryData";
 import type {
   Category as CategoryData,
+  CategoryAddon,
+  CategoryDetail,
+  CategoryHero,
+  CategoryInformation,
+  CategoryPlayer,
   CategorySection,
+  CategoryVariation,
 } from "./categoryData";
 
-const chunkSections = <T,>(items: T[], size: number) => {
-  const chunks: T[][] = [];
-
-  for (let index = 0; index < items.length; index += size) {
-    chunks.push(items.slice(index, index + size));
-  }
-
-  return chunks;
-};
+const removeAt = <T,>(items: T[], index: number): T[] =>
+  items.filter((_, itemIndex) => itemIndex !== index);
 
 export default function Category() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const { isOpen, openModal, closeModal } = useModal();
 
   const [category, setCategory] = useState<CategoryData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const decodedId = useMemo(() => {
     if (!id || id === "new") {
@@ -51,62 +60,196 @@ export default function Category() {
     }
   }, [id]);
 
+  const emptyCategory = useMemo(
+    () =>
+      createEmptyCategory(
+        decodedId === "new" || decodedId === "" ? undefined : decodedId
+      ),
+    [decodedId]
+  );
+
   useEffect(() => {
     if (decodedId === "" || decodedId === "new") {
       setCategory(createEmptyCategory());
+      setLoadError(decodedId === "" ? "Id invalido en la URL." : null);
+      setLoading(false);
       return;
     }
 
-    const found = loadCategories().find((item) => item.id === decodedId);
-    setCategory(found ?? createEmptyCategory());
+    let isCurrent = true;
+
+    const loadCategory = async () => {
+      setLoading(true);
+      setLoadError(null);
+
+      try {
+        const found = await fetchCategory(decodedId);
+
+        if (!isCurrent) {
+          return;
+        }
+
+        setCategory(found);
+      } catch {
+        if (!isCurrent) {
+          return;
+        }
+
+        setCategory(createEmptyCategory(decodedId));
+        setLoadError("No se pudo cargar la categoria del API.");
+      } finally {
+        if (isCurrent) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadCategory();
+
+    return () => {
+      isCurrent = false;
+    };
   }, [decodedId]);
 
-  const safeCategory = category ?? createEmptyCategory();
+  const safeCategory = category ?? emptyCategory;
 
   const updateCategory = (patch: Partial<CategoryData>) => {
     setCategory({ ...safeCategory, ...patch });
     setSaveMessage(null);
+    setSaveError(null);
   };
 
-  const updateSection = (
-    sectionId: string,
-    patch: Partial<CategorySection>
+  const onSave = async () => {
+    setIsSaving(true);
+    setSaveMessage(null);
+    setSaveError(null);
+
+    try {
+      const isNewCategory = decodedId === "new";
+      const categoryToSave = isNewCategory
+        ? safeCategory
+        : { ...safeCategory, category_id: decodedId };
+      const savedCategory = isNewCategory
+        ? await createCategoryRequest(categoryToSave)
+        : await updateCategoryRequest(categoryToSave);
+
+      setCategory(savedCategory);
+      setSaveMessage(
+        isNewCategory
+          ? "Categoria creada correctamente."
+          : "Categoria actualizada correctamente."
+      );
+
+      if (isNewCategory) {
+        navigate(`/categories/${btoa(savedCategory.category_id)}`, {
+          replace: true,
+        });
+      }
+    } catch (error) {
+      const apiError = error instanceof Error ? ` ${error.message}` : "";
+      setSaveError(
+        decodedId === "new"
+          ? `No se pudo crear la categoria en el API.${apiError}`
+          : `No se pudo actualizar la categoria en el API.${apiError}`
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const renderImageField = (
+    idPrefix: string,
+    value: string,
+    onChange: (url: string) => void
   ) => {
+    const previewUrl = resolveS3ImageUrl(value);
+
+    return (
+      <div className="space-y-3">
+        <div>
+          <Label htmlFor={`${idPrefix}-image`}>Image URL</Label>
+          <Input
+            id={`${idPrefix}-image`}
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            placeholder="https://.../image.jpg"
+          />
+        </div>
+        {previewUrl && (
+          <div className="h-36 overflow-hidden rounded-xl border border-gray-200 bg-gray-100 dark:border-white/[0.08] dark:bg-gray-900">
+            <img
+              src={previewUrl}
+              alt="Preview"
+              className="h-full w-full object-cover"
+              onError={(event) => {
+                event.currentTarget.src = "/images/logo/ifx-logo.png";
+              }}
+            />
+          </div>
+        )}
+        <S3ImageManager selectedUrl={value} onSelect={onChange} />
+      </div>
+    );
+  };
+
+  const updateHero = (index: number, patch: Partial<CategoryHero>) => {
     updateCategory({
-      sections: safeCategory.sections.map((section) =>
-        section.id === sectionId ? { ...section, ...patch } : section
+      category_hero: safeCategory.category_hero.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, ...patch } : item
       ),
     });
   };
 
-  const addSection = () => {
+  const updateSection = (index: number, patch: Partial<CategorySection>) => {
     updateCategory({
-      sections: [
-        ...safeCategory.sections,
-        createEmptyCategorySection(safeCategory.sections.length),
-      ],
+      category_section: safeCategory.category_section.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, ...patch } : item
+      ),
     });
   };
 
-  const removeSection = (sectionId: string) => {
+  const updateDetail = (index: number, patch: Partial<CategoryDetail>) => {
     updateCategory({
-      sections: safeCategory.sections.filter((section) => section.id !== sectionId),
+      category_details: safeCategory.category_details.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, ...patch } : item
+      ),
     });
   };
 
-  const onSave = () => {
-    upsertCategory(safeCategory);
-    setSaveMessage("Categoria guardada localmente.");
-
-    if (decodedId === "new") {
-      navigate(`/categories/${btoa(safeCategory.id)}`, { replace: true });
-    }
+  const updateAddon = (index: number, patch: Partial<CategoryAddon>) => {
+    updateCategory({
+      category_addons: safeCategory.category_addons.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, ...patch } : item
+      ),
+    });
   };
 
-  const visibleSections = safeCategory.sections.filter(
-    (section) => section.enabled === 1
-  );
-  const sectionGroups = chunkSections(visibleSections, 3);
+  const updateVariation = (index: number, patch: Partial<CategoryVariation>) => {
+    updateCategory({
+      category_variations: safeCategory.category_variations.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, ...patch } : item
+      ),
+    });
+  };
+
+  const updatePlayer = (index: number, patch: Partial<CategoryPlayer>) => {
+    updateCategory({
+      category_players: safeCategory.category_players.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, ...patch } : item
+      ),
+    });
+  };
+
+  const updateInformation = (
+    index: number,
+    patch: Partial<CategoryInformation>
+  ) => {
+    updateCategory({
+      category_information: safeCategory.category_information.map(
+        (item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)
+      ),
+    });
+  };
 
   return (
     <>
@@ -117,7 +260,7 @@ export default function Category() {
       <div className="space-y-6">
         <ComponentCard
           title={decodedId === "new" ? "New Category" : "Category"}
-          desc="Front provisional con persistencia local mientras definimos el resto del contenido."
+          desc="Mantenedor conectado al API v1/category/."
         >
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -126,54 +269,75 @@ export default function Category() {
                   {saveMessage}
                 </p>
               )}
+              {saveError && (
+                <p className="text-sm text-error-600 dark:text-error-400">
+                  {saveError}
+                </p>
+              )}
+              {loadError && (
+                <p className="text-sm text-error-600 dark:text-error-400">
+                  {loadError}
+                </p>
+              )}
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={openModal}>
-                Preview Page
-              </Button>
               <Button
                 variant="outline"
                 onClick={() => navigate("/categories-list")}
               >
                 Back to List
               </Button>
-              <Button onClick={onSave}>Save Category</Button>
+              <Button
+                variant="outline"
+                onClick={() =>
+                  navigate(`/categories/preview/${btoa(safeCategory.category_id)}`, {
+                    state: { previewCategory: safeCategory },
+                  })
+                }
+              >
+                Preview Page
+              </Button>
+              <Button onClick={onSave} disabled={isSaving || loading}>
+                {isSaving ? "Saving..." : "Save Category"}
+              </Button>
             </div>
           </div>
 
-          <div className="rounded-2xl border-2 border-[#3558a8] bg-[#f5f8ff] p-4 dark:border-[#4f6cb2] dark:bg-[#101a33]">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-[#234487] dark:text-[#9fb5e8]">
-                Main Category Content
-              </h3>
-              <span className="rounded-md bg-[#dce6fb] px-2 py-1 text-xs font-semibold text-[#234487] dark:bg-[#1a2b54] dark:text-[#b6c7ef]">
-                Principal
-              </span>
+          {loading ? (
+            <div className="py-6 text-sm text-gray-500 dark:text-gray-400">
+              Cargando categoria...
             </div>
-
-            <div className="space-y-6">
+          ) : (
+            <div className="mt-6 space-y-6">
               <div className="grid gap-6 lg:grid-cols-2">
                 <div>
-                  <Label htmlFor="category-title">Titulo</Label>
+                  <Label htmlFor="category-id">Id</Label>
                   <Input
-                    id="category-title"
-                    value={safeCategory.title}
-                    onChange={(e) => updateCategory({ title: e.target.value })}
-                    placeholder="Nombre de la categoria"
+                    id="category-id"
+                    value={safeCategory.category_id}
+                    disabled
                   />
                 </div>
                 <div>
-                  <Label>Status</Label>
+                  <Label>Enabled</Label>
                   <div className="flex gap-2">
                     <Button
-                      variant={safeCategory.enabled === 1 ? "primary" : "outline"}
-                      onClick={() => updateCategory({ enabled: 1 })}
+                      variant={
+                        normalizeEnabled(safeCategory.category_enabled) === 1
+                          ? "primary"
+                          : "outline"
+                      }
+                      onClick={() => updateCategory({ category_enabled: true })}
                     >
                       Enabled
                     </Button>
                     <Button
-                      variant={safeCategory.enabled === 0 ? "primary" : "outline"}
-                      onClick={() => updateCategory({ enabled: 0 })}
+                      variant={
+                        normalizeEnabled(safeCategory.category_enabled) === 0
+                          ? "primary"
+                          : "outline"
+                      }
+                      onClick={() => updateCategory({ category_enabled: false })}
                     >
                       Disabled
                     </Button>
@@ -181,199 +345,132 @@ export default function Category() {
                 </div>
               </div>
 
-              <div>
-                <Label htmlFor="category-image">Foto Principal</Label>
-                <Input
-                  id="category-image"
-                  value={safeCategory.image}
-                  onChange={(e) => updateCategory({ image: e.target.value })}
-                  placeholder="https://..."
-                />
+              <div className="grid gap-6 lg:grid-cols-2">
+                <div>
+                  <Label htmlFor="category-title">Title</Label>
+                  <Input
+                    id="category-title"
+                    value={safeCategory.category_title}
+                    onChange={(event) =>
+                      updateCategory({ category_title: event.target.value })
+                    }
+                    placeholder="German University / Soccer College category in Europe"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="category-category">Category</Label>
+                  <Input
+                    id="category-category"
+                    value={safeCategory.category_category}
+                    onChange={(event) =>
+                      updateCategory({ category_category: event.target.value })
+                    }
+                    placeholder="Soccer Schools, Camps and International Academies"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-6 lg:grid-cols-3">
+                <div>
+                  <Label htmlFor="category-date">Date</Label>
+                  <Input
+                    id="category-date"
+                    type="date"
+                    value={safeCategory.category_date}
+                    onChange={(event) =>
+                      updateCategory({ category_date: event.target.value })
+                    }
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="category-status">Status</Label>
+                  <Input
+                    id="category-status"
+                    value={safeCategory.category_status}
+                    onChange={(event) =>
+                      updateCategory({ category_status: event.target.value })
+                    }
+                    placeholder="published"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="category-apply">Apply URL</Label>
+                  <Input
+                    id="category-apply"
+                    value={safeCategory.category_apply}
+                    onChange={(event) =>
+                      updateCategory({ category_apply: event.target.value })
+                    }
+                    placeholder="/categorys/german-university..."
+                  />
+                </div>
               </div>
 
               <div>
-                <Label>Biblioteca S3 Foto Principal</Label>
-                <S3ImageManager
-                  selectedUrl={safeCategory.image}
-                  onSelect={(url) => updateCategory({ image: url })}
-                />
-              </div>
-
-              <div>
-                <Label>Texto Principal</Label>
+                <Label>Description</Label>
                 <TextArea
-                  rows={6}
-                  value={safeCategory.mainText}
-                  onChange={(value) => updateCategory({ mainText: value })}
+                  rows={8}
+                  value={safeCategory.category_description}
+                  onChange={(value) =>
+                    updateCategory({ category_description: value })
+                  }
                   placeholder="Descripcion principal de la categoria"
                 />
               </div>
-
-              <div className="grid gap-6 lg:grid-cols-2">
-                <div>
-                  <Label htmlFor="category-learn-more-url">Learn More URL</Label>
-                  <Input
-                    id="category-learn-more-url"
-                    value={safeCategory.learnMoreUrl}
-                    onChange={(e) =>
-                      updateCategory({ learnMoreUrl: e.target.value })
-                    }
-                    placeholder="https://..."
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="category-apply-online-url">Apply Online URL</Label>
-                  <Input
-                    id="category-apply-online-url"
-                    value={safeCategory.applyOnlineUrl}
-                    onChange={(e) =>
-                      updateCategory({ applyOnlineUrl: e.target.value })
-                    }
-                    placeholder="https://..."
-                  />
-                </div>
-              </div>
             </div>
-          </div>
+          )}
         </ComponentCard>
 
-        <ComponentCard
-          title="Sections Builder"
-          desc="Secciones dinamicas con foto, titulo, texto y enlaces de accion."
-        >
-          <div className="rounded-2xl border-2 border-[#3558a8] bg-[#f5f8ff] p-4 dark:border-[#4f6cb2] dark:bg-[#101a33]">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-[#234487] dark:text-[#9fb5e8]">
-                Sections Area
-              </h3>
-              <span className="rounded-md bg-[#dce6fb] px-2 py-1 text-xs font-semibold text-[#234487] dark:bg-[#1a2b54] dark:text-[#b6c7ef]">
-                Sections
-              </span>
-            </div>
-            <div className="mb-4 flex justify-end">
-              <Button onClick={addSection}>Add Section</Button>
-            </div>
-
-            {safeCategory.sections.map((section, index) => (
+        <ComponentCard title="Hero" desc="Imagenes principales de la categoria.">
+          <div className="mb-4 flex justify-end">
+            <Button
+              onClick={() =>
+                updateCategory({
+                  category_hero: [
+                    ...safeCategory.category_hero,
+                    createEmptyCategoryHero(),
+                  ],
+                })
+              }
+            >
+              Add Hero
+            </Button>
+          </div>
+          <div className="space-y-4">
+            {safeCategory.category_hero.map((item, index) => (
               <div
-                key={section.id}
-                className={`mb-4 rounded-2xl border-2 p-4 ${
-                  index % 2 === 0
-                    ? "border-[#9eb4e7] bg-white dark:border-[#4a5f91] dark:bg-gray-900/60"
-                    : "border-[#bfd0f2] bg-[#f8fbff] dark:border-[#516799] dark:bg-gray-900/40"
-                }`}
+                key={`hero-${index}`}
+                className="rounded-xl border border-gray-200 p-4 dark:border-gray-800"
               >
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <div className="mb-1 inline-flex rounded-md bg-[#dce6fb] px-2 py-1 text-xs font-semibold uppercase tracking-wide text-[#234487] dark:bg-[#1a2b54] dark:text-[#b6c7ef]">
-                      Section {index + 1}
-                    </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      Esta tarjeta aparecera en el preview dentro del grupo de 3.
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant={section.enabled === 1 ? "primary" : "outline"}
-                      size="sm"
-                      onClick={() => updateSection(section.id, { enabled: 1 })}
-                    >
-                      Enabled
-                    </Button>
-                    <Button
-                      variant={section.enabled === 0 ? "primary" : "outline"}
-                      size="sm"
-                      onClick={() => updateSection(section.id, { enabled: 0 })}
-                    >
-                      Disabled
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => removeSection(section.id)}
-                      disabled={safeCategory.sections.length === 1}
-                    >
-                      Delete Section
-                    </Button>
-                  </div>
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                    Hero {index + 1}
+                  </h4>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      updateCategory({
+                        category_hero: removeAt(safeCategory.category_hero, index),
+                      })
+                    }
+                    disabled={safeCategory.category_hero.length === 1}
+                  >
+                    Delete
+                  </Button>
                 </div>
-
                 <div className="grid gap-4 lg:grid-cols-2">
+                  {renderImageField(`category-hero-${index}`, item.image_url, (url) =>
+                    updateHero(index, { image_url: url })
+                  )}
                   <div>
-                    <Label htmlFor={`category-section-title-${section.id}`}>
-                      Titulo
-                    </Label>
+                    <Label htmlFor={`category-hero-text-${index}`}>Image Text</Label>
                     <Input
-                      id={`category-section-title-${section.id}`}
-                      value={section.title}
-                      onChange={(e) =>
-                        updateSection(section.id, { title: e.target.value })
+                      id={`category-hero-text-${index}`}
+                      value={item.image_text}
+                      onChange={(event) =>
+                        updateHero(index, { image_text: event.target.value })
                       }
-                      placeholder="Titulo de la seccion"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor={`category-section-image-${section.id}`}>
-                      Foto
-                    </Label>
-                    <Input
-                      id={`category-section-image-${section.id}`}
-                      value={section.image}
-                      onChange={(e) =>
-                        updateSection(section.id, { image: e.target.value })
-                      }
-                      placeholder="https://..."
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label>Biblioteca S3 Foto</Label>
-                  <S3ImageManager
-                    selectedUrl={section.image}
-                    onSelect={(url) => updateSection(section.id, { image: url })}
-                  />
-                </div>
-
-                <div>
-                  <Label>Texto</Label>
-                  <TextArea
-                    rows={4}
-                    value={section.text}
-                    onChange={(value) => updateSection(section.id, { text: value })}
-                    placeholder="Contenido de la seccion"
-                  />
-                </div>
-
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <div>
-                    <Label htmlFor={`category-section-learn-${section.id}`}>
-                      Learn More URL
-                    </Label>
-                    <Input
-                      id={`category-section-learn-${section.id}`}
-                      value={section.learnMoreUrl}
-                      onChange={(e) =>
-                        updateSection(section.id, {
-                          learnMoreUrl: e.target.value,
-                        })
-                      }
-                      placeholder="https://..."
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor={`category-section-apply-${section.id}`}>
-                      Apply Online URL
-                    </Label>
-                    <Input
-                      id={`category-section-apply-${section.id}`}
-                      value={section.applyOnlineUrl}
-                      onChange={(e) =>
-                        updateSection(section.id, {
-                          applyOnlineUrl: e.target.value,
-                        })
-                      }
-                      placeholder="https://..."
                     />
                   </div>
                 </div>
@@ -381,84 +478,503 @@ export default function Category() {
             ))}
           </div>
         </ComponentCard>
-      </div>
 
-      <Modal isOpen={isOpen} onClose={closeModal} className="mx-4 max-w-7xl p-0">
-        <div className="max-h-[88vh] overflow-y-auto bg-[#e3e3e3] p-3 sm:p-5">
-          <div className="mx-auto w-full max-w-[1100px] overflow-hidden rounded-[22px] bg-white text-[#1e1e1e]">
-            <div className="space-y-7 px-5 py-6 sm:px-10 sm:py-10">
-              <h1 className="text-center text-[30px] font-semibold leading-tight text-[#1d4690] sm:text-[46px]">
-                {safeCategory.title || "Category Title"}
-              </h1>
-
-              <div className="mx-auto max-w-[980px] space-y-2 text-[14px] leading-6 text-[#28313f] sm:text-[16px]">
-                {(safeCategory.mainText || "El texto principal de la categoria aparecera aqui.")
-                  .split(/\n+/)
-                  .filter((line) => line.trim().length > 0)
-                  .map((line, lineIndex) => (
-                    <p key={lineIndex}>{line}</p>
-                  ))}
-              </div>
-
-              <div className="space-y-10">
-                {sectionGroups.map((group, groupIndex) => (
-                  <section
-                    key={`group-${groupIndex}`}
-                    className="grid gap-x-5 gap-y-8 sm:grid-cols-2 xl:grid-cols-3"
-                  >
-                    {group.map((section) => (
-                      <article key={section.id} className="flex flex-col">
-                        <div className="h-[180px] overflow-hidden bg-[#d2d2d2] sm:h-[220px]">
-                          {section.image ? (
-                            <img
-                              src={section.image}
-                              alt={section.title || "Category section"}
-                              className="h-full w-full object-cover"
-                              onError={(event) => {
-                                event.currentTarget.src = "/images/logo/ifx-logo.png";
-                              }}
-                            />
-                          ) : (
-                            <div className="flex h-full items-center justify-center text-sm text-gray-500">
-                              Imagen de la seccion
-                            </div>
-                          )}
-                        </div>
-                        <div className="mt-2">
-                          <h2 className="text-[24px] font-medium uppercase leading-tight text-[#1d3570] sm:text-[28px]">
-                            {section.title || "Titulo de la seccion"}
-                          </h2>
-                          <p className="mt-2 line-clamp-3 min-h-[72px] text-[13px] leading-6 text-[#394457] sm:text-[14px]">
-                            {section.text || "El texto de la seccion aparecera aqui."}
-                          </p>
-                          <div className="mt-4 flex items-center gap-3">
-                            <a
-                              href={section.learnMoreUrl || "#"}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex min-h-[38px] min-w-[120px] items-center justify-center px-4 text-[13px] font-medium uppercase tracking-[0.02em] text-[#8a8253] transition hover:text-[#6e673f]"
-                            >
-                              Learn More
-                            </a>
-                            <a
-                              href={section.applyOnlineUrl || "#"}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex min-h-[38px] min-w-[140px] items-center justify-center rounded-[4px] bg-[#2e3a84] px-4 text-[13px] font-semibold uppercase tracking-[0.02em] text-white transition hover:bg-[#23306f]"
-                            >
-                              Apply Online
-                            </a>
-                          </div>
-                        </div>
-                      </article>
-                    ))}
-                  </section>
-                ))}
-              </div>
-            </div>
+        <ComponentCard title="Sections" desc="Bloques category_section.">
+          <div className="mb-4 flex justify-end">
+            <Button
+              onClick={() =>
+                updateCategory({
+                  category_section: [
+                    ...safeCategory.category_section,
+                    createEmptyCategorySection(safeCategory.category_section.length),
+                  ],
+                })
+              }
+            >
+              Add Section
+            </Button>
           </div>
-        </div>
-      </Modal>
+          <div className="space-y-4">
+            {safeCategory.category_section.map((item, index) => (
+              <div
+                key={`section-${index}`}
+                className="rounded-xl border border-gray-200 p-4 dark:border-gray-800"
+              >
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                    Section {index + 1}
+                  </h4>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      updateCategory({
+                        category_section: removeAt(
+                          safeCategory.category_section,
+                          index
+                        ),
+                      })
+                    }
+                    disabled={safeCategory.category_section.length === 1}
+                  >
+                    Delete
+                  </Button>
+                </div>
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {renderImageField(
+                    `category-section-${index}`,
+                    item.section_image,
+                    (url) => updateSection(index, { section_image: url })
+                  )}
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor={`category-section-title-${index}`}>
+                        Section Title
+                      </Label>
+                      <Input
+                        id={`category-section-title-${index}`}
+                        value={item.section_title}
+                        onChange={(event) =>
+                          updateSection(index, { section_title: event.target.value })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor={`category-section-order-${index}`}>
+                        Section Order
+                      </Label>
+                      <Input
+                        id={`category-section-order-${index}`}
+                        value={item.section_order}
+                        onChange={(event) =>
+                          updateSection(index, { section_order: event.target.value })
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <Label>Section Text</Label>
+                  <TextArea
+                    rows={6}
+                    value={item.section_text}
+                    onChange={(value) => updateSection(index, { section_text: value })}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </ComponentCard>
+
+        <ComponentCard title="Details" desc="Bloques category_details.">
+          <div className="mb-4 flex justify-end">
+            <Button
+              onClick={() =>
+                updateCategory({
+                  category_details: [
+                    ...safeCategory.category_details,
+                    createEmptyCategoryDetail(),
+                  ],
+                })
+              }
+            >
+              Add Detail
+            </Button>
+          </div>
+          <div className="space-y-4">
+            {safeCategory.category_details.map((item, index) => (
+              <div
+                key={`detail-${index}`}
+                className="rounded-xl border border-gray-200 p-4 dark:border-gray-800"
+              >
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                    Detail {index + 1}
+                  </h4>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      updateCategory({
+                        category_details: removeAt(
+                          safeCategory.category_details,
+                          index
+                        ),
+                      })
+                    }
+                    disabled={safeCategory.category_details.length === 1}
+                  >
+                    Delete
+                  </Button>
+                </div>
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div>
+                    <Label htmlFor={`category-detail-title-${index}`}>
+                      Detail Title
+                    </Label>
+                    <Input
+                      id={`category-detail-title-${index}`}
+                      value={item.detail_title}
+                      onChange={(event) =>
+                        updateDetail(index, { detail_title: event.target.value })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor={`category-detail-file-${index}`}>
+                      Detail File
+                    </Label>
+                    <Input
+                      id={`category-detail-file-${index}`}
+                      value={item.detail_file}
+                      onChange={(event) =>
+                        updateDetail(index, { detail_file: event.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <Label>Detail Text</Label>
+                  <TextArea
+                    rows={6}
+                    value={item.detail_text}
+                    onChange={(value) => updateDetail(index, { detail_text: value })}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </ComponentCard>
+
+        <ComponentCard title="Addons" desc="Bloques category_addons.">
+          <div className="mb-4 flex justify-end">
+            <Button
+              onClick={() =>
+                updateCategory({
+                  category_addons: [
+                    ...safeCategory.category_addons,
+                    createEmptyCategoryAddon(),
+                  ],
+                })
+              }
+            >
+              Add Addon
+            </Button>
+          </div>
+          <div className="space-y-4">
+            {safeCategory.category_addons.map((item, index) => (
+              <div
+                key={`addon-${index}`}
+                className="rounded-xl border border-gray-200 p-4 dark:border-gray-800"
+              >
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                    Addon {index + 1}
+                  </h4>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      updateCategory({
+                        category_addons: removeAt(
+                          safeCategory.category_addons,
+                          index
+                        ),
+                      })
+                    }
+                    disabled={safeCategory.category_addons.length === 1}
+                  >
+                    Delete
+                  </Button>
+                </div>
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div>
+                    <Label htmlFor={`category-addon-title-${index}`}>
+                      Addon Title
+                    </Label>
+                    <Input
+                      id={`category-addon-title-${index}`}
+                      value={item.addons_title}
+                      onChange={(event) =>
+                        updateAddon(index, { addons_title: event.target.value })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor={`category-addon-cost-${index}`}>Cost</Label>
+                    <Input
+                      id={`category-addon-cost-${index}`}
+                      value={item.addons_cost}
+                      onChange={(event) =>
+                        updateAddon(index, { addons_cost: event.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <Label>Description</Label>
+                  <TextArea
+                    rows={4}
+                    value={item.addons_description}
+                    onChange={(value) =>
+                      updateAddon(index, { addons_description: value })
+                    }
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </ComponentCard>
+
+        <ComponentCard title="Variations" desc="Bloques category_variations.">
+          <div className="mb-4 flex justify-end">
+            <Button
+              onClick={() =>
+                updateCategory({
+                  category_variations: [
+                    ...safeCategory.category_variations,
+                    createEmptyCategoryVariation(),
+                  ],
+                })
+              }
+            >
+              Add Variation
+            </Button>
+          </div>
+          <div className="space-y-4">
+            {safeCategory.category_variations.map((item, index) => (
+              <div
+                key={`variation-${index}`}
+                className="rounded-xl border border-gray-200 p-4 dark:border-gray-800"
+              >
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                    Variation {index + 1}
+                  </h4>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      updateCategory({
+                        category_variations: removeAt(
+                          safeCategory.category_variations,
+                          index
+                        ),
+                      })
+                    }
+                    disabled={safeCategory.category_variations.length === 1}
+                  >
+                    Delete
+                  </Button>
+                </div>
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div>
+                    <Label htmlFor={`category-variation-description-${index}`}>
+                      Description
+                    </Label>
+                    <Input
+                      id={`category-variation-description-${index}`}
+                      value={item.variations_description}
+                      onChange={(event) =>
+                        updateVariation(index, {
+                          variations_description: event.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor={`category-variation-cost-${index}`}>Cost</Label>
+                    <Input
+                      id={`category-variation-cost-${index}`}
+                      value={item.variations_cost}
+                      onChange={(event) =>
+                        updateVariation(index, { variations_cost: event.target.value })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor={`category-variation-dates-${index}`}>
+                      Dates
+                    </Label>
+                    <Input
+                      id={`category-variation-dates-${index}`}
+                      value={item.variations_dates}
+                      onChange={(event) =>
+                        updateVariation(index, {
+                          variations_dates: event.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor={`category-variation-deadline-${index}`}>
+                      Deadline
+                    </Label>
+                    <Input
+                      id={`category-variation-deadline-${index}`}
+                      value={item.variations_deadline}
+                      onChange={(event) =>
+                        updateVariation(index, {
+                          variations_deadline: event.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </ComponentCard>
+
+        <ComponentCard title="Players" desc="Testimonios category_players.">
+          <div className="mb-4 flex justify-end">
+            <Button
+              onClick={() =>
+                updateCategory({
+                  category_players: [
+                    ...safeCategory.category_players,
+                    createEmptyCategoryPlayer(),
+                  ],
+                })
+              }
+            >
+              Add Player
+            </Button>
+          </div>
+          <div className="space-y-4">
+            {safeCategory.category_players.map((item, index) => (
+              <div
+                key={`player-${index}`}
+                className="rounded-xl border border-gray-200 p-4 dark:border-gray-800"
+              >
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                    Player {index + 1}
+                  </h4>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      updateCategory({
+                        category_players: removeAt(
+                          safeCategory.category_players,
+                          index
+                        ),
+                      })
+                    }
+                    disabled={safeCategory.category_players.length === 1}
+                  >
+                    Delete
+                  </Button>
+                </div>
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {renderImageField(
+                    `category-player-${index}`,
+                    item.player_image,
+                    (url) => updatePlayer(index, { player_image: url })
+                  )}
+                  <div>
+                    <Label htmlFor={`category-player-description-${index}`}>
+                      Player Description
+                    </Label>
+                    <Input
+                      id={`category-player-description-${index}`}
+                      value={item.player_description}
+                      onChange={(event) =>
+                        updatePlayer(index, {
+                          player_description: event.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <Label>Player Says</Label>
+                  <TextArea
+                    rows={4}
+                    value={item.player_says}
+                    onChange={(value) => updatePlayer(index, { player_says: value })}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </ComponentCard>
+
+        <ComponentCard title="Information" desc="Bloques category_information.">
+          <div className="mb-4 flex justify-end">
+            <Button
+              onClick={() =>
+                updateCategory({
+                  category_information: [
+                    ...safeCategory.category_information,
+                    createEmptyCategoryInformation(),
+                  ],
+                })
+              }
+            >
+              Add Information
+            </Button>
+          </div>
+          <div className="space-y-4">
+            {safeCategory.category_information.length === 0 && (
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                No hay informacion adicional.
+              </p>
+            )}
+            {safeCategory.category_information.map((item, index) => (
+              <div
+                key={`information-${index}`}
+                className="rounded-xl border border-gray-200 p-4 dark:border-gray-800"
+              >
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                    Information {index + 1}
+                  </h4>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      updateCategory({
+                        category_information: removeAt(
+                          safeCategory.category_information,
+                          index
+                        ),
+                      })
+                    }
+                  >
+                    Delete
+                  </Button>
+                </div>
+                <div>
+                  <Label htmlFor={`category-information-title-${index}`}>
+                    Information Title
+                  </Label>
+                  <Input
+                    id={`category-information-title-${index}`}
+                    value={item.information_title}
+                    onChange={(event) =>
+                      updateInformation(index, {
+                        information_title: event.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div className="mt-4">
+                  <Label>Information Text</Label>
+                  <TextArea
+                    rows={4}
+                    value={item.information_text}
+                    onChange={(value) =>
+                      updateInformation(index, { information_text: value })
+                    }
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </ComponentCard>
+      </div>
     </>
   );
 }

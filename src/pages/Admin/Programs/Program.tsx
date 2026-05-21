@@ -9,6 +9,7 @@ import TextArea from "../../../components/form/input/TextArea";
 import S3ImageManager from "../../../components/page/S3ImageManager";
 import Button from "../../../components/ui/button/Button";
 import { resolveS3ImageUrl } from "../../../utils/s3Image";
+import ProgramDetail, { createProgramApplyUrl } from "./ProgramDetail";
 import {
   createEmptyProgram,
   createEmptyProgramAddon,
@@ -20,13 +21,12 @@ import {
   createEmptyProgramVariation,
   createProgram as createProgramRequest,
   fetchProgram,
-  normalizeEnabled,
   updateProgram as updateProgramRequest,
 } from "./programData";
 import type {
   Program,
   ProgramAddon,
-  ProgramDetail,
+  ProgramDetail as ProgramDetailItem,
   ProgramHero,
   ProgramInformation,
   ProgramPlayer,
@@ -123,9 +123,14 @@ export default function Program() {
 
     try {
       const isNewProgram = decodedId === "new";
+      const normalizedProgram = {
+        ...safeProgram,
+        program_apply:
+          safeProgram.program_apply.trim() || createProgramApplyUrl(safeProgram.program_title),
+      };
       const programToSave = isNewProgram
-        ? safeProgram
-        : { ...safeProgram, program_id: decodedId };
+        ? normalizedProgram
+        : { ...normalizedProgram, program_id: decodedId };
       const savedProgram = isNewProgram
         ? await createProgramRequest(programToSave)
         : await updateProgramRequest(programToSave);
@@ -176,7 +181,7 @@ export default function Program() {
     });
   };
 
-  const updateDetail = (index: number, patch: Partial<ProgramDetail>) => {
+  const updateDetail = (index: number, patch: Partial<ProgramDetailItem>) => {
     updateProgram({
       program_details: safeProgram.program_details.map((item, itemIndex) =>
         itemIndex === index ? { ...item, ...patch } : item
@@ -290,104 +295,7 @@ export default function Program() {
             </div>
           </div>
 
-          <div className="rounded-2xl border-2 border-[#3558a8] bg-[#f5f8ff] p-4 dark:border-[#4f6cb2] dark:bg-[#101a33]">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-[#234487] dark:text-[#9fb5e8]">
-                Main Program Content
-              </h3>
-              <span className="rounded-md bg-[#dce6fb] px-2 py-1 text-xs font-semibold text-[#234487] dark:bg-[#1a2b54] dark:text-[#b6c7ef]">
-                Principal
-              </span>
-            </div>
-
-            <div className="space-y-6">
-              <div>
-                <Label htmlFor="program-id">Id</Label>
-                <Input id="program-id" value={safeProgram.program_id} disabled />
-              </div>
-
-              <div className="grid gap-6 lg:grid-cols-2">
-                <div>
-                  <Label htmlFor="program-title">Titulo</Label>
-                  <Input
-                    id="program-title"
-                    value={safeProgram.program_title}
-                    onChange={(event) => updateProgram({ program_title: event.target.value })}
-                    placeholder="Nombre del programa"
-                  />
-                </div>
-                <div>
-                  <Label>Status</Label>
-                  <div className="flex gap-2">
-                    <Button
-                      variant={normalizeEnabled(safeProgram.program_enabled) === 1 ? "primary" : "outline"}
-                      onClick={() => updateProgram({ program_enabled: true })}
-                    >
-                      Enabled
-                    </Button>
-                    <Button
-                      variant={normalizeEnabled(safeProgram.program_enabled) === 0 ? "primary" : "outline"}
-                      onClick={() => updateProgram({ program_enabled: false })}
-                    >
-                      Disabled
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <Label htmlFor="program-description">Descripcion</Label>
-                <TextArea
-                  rows={5}
-                  value={safeProgram.program_description}
-                  onChange={(value) => updateProgram({ program_description: value })}
-                  placeholder="Descripcion principal del programa"
-                />
-              </div>
-
-              <div className="grid gap-6 lg:grid-cols-2">
-                <div>
-                  <Label htmlFor="program-category">Categoria</Label>
-                  <Input
-                    id="program-category"
-                    value={safeProgram.program_category}
-                    onChange={(event) => updateProgram({ program_category: event.target.value })}
-                    placeholder="Categoria"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="program-status">Program Status</Label>
-                  <Input
-                    id="program-status"
-                    value={safeProgram.program_status}
-                    onChange={(event) => updateProgram({ program_status: event.target.value })}
-                    placeholder="Status"
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-6 lg:grid-cols-2">
-                <div>
-                  <Label htmlFor="program-apply">Apply URL</Label>
-                  <Input
-                    id="program-apply"
-                    value={safeProgram.program_apply}
-                    onChange={(event) => updateProgram({ program_apply: event.target.value })}
-                    placeholder="https://..."
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="program-date">Fecha de Publicacion</Label>
-                  <Input
-                    id="program-date"
-                    type="date"
-                    value={safeProgram.program_date}
-                    onChange={(event) => updateProgram({ program_date: event.target.value })}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
+          <ProgramDetail program={safeProgram} onChange={updateProgram} />
         </ComponentCard>
 
         <ComponentCard title="Program Hero" desc="Carrusel principal del programa.">

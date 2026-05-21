@@ -1,50 +1,11 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import PageBreadcrumb from "../../../components/common/PageBreadCrumb";
 import PageMeta from "../../../components/common/PageMeta";
 import Button from "../../../components/ui/button/Button";
-import { createEmptyCategory, loadCategories } from "./categoryData";
-import type { Category, CategorySection } from "./categoryData";
-
-const chunkSections = <T,>(items: T[], size: number) => {
-  const chunks: T[][] = [];
-
-  for (let index = 0; index < items.length; index += size) {
-    chunks.push(items.slice(index, index + size));
-  }
-
-  return chunks;
-};
-
-const SAMPLE_SECTIONS: CategorySection[] = [
-  {
-    id: "sample-1",
-    title: "Soccer Trials In Spain - AD Alcorcon",
-    text: "Elite summer experience focused on development, exposure and high-level sessions in Spain.",
-    image: "/images/brand/brand-01.svg",
-    learnMoreUrl: "#",
-    applyOnlineUrl: "#",
-    enabled: 1,
-  },
-  {
-    id: "sample-2",
-    title: "Paris Saint-Germain Academy Pro Europe",
-    text: "Professional training environment with expert coaches and advanced methodology.",
-    image: "/images/brand/brand-02.svg",
-    learnMoreUrl: "#",
-    applyOnlineUrl: "#",
-    enabled: 1,
-  },
-  {
-    id: "sample-3",
-    title: "2026 IFX Germany Soccer Camps In Bayern",
-    text: "Competitive development camps with immersive training and international exposure.",
-    image: "/images/brand/brand-03.svg",
-    learnMoreUrl: "#",
-    applyOnlineUrl: "#",
-    enabled: 1,
-  },
-];
+import { resolveS3ImageUrl } from "../../../utils/s3Image";
+import { createEmptyCategory, fetchCategory } from "./categoryData";
+import type { Category } from "./categoryData";
 
 export default function CategoryPreview() {
   const navigate = useNavigate();
@@ -52,6 +13,7 @@ export default function CategoryPreview() {
   const { id } = useParams<{ id: string }>();
 
   const previewCategory = location.state?.previewCategory as Category | undefined;
+  const [loadedCategory, setLoadedCategory] = useState<Category | null>(null);
 
   const decodedId = useMemo(() => {
     if (!id || id === "new") {
@@ -65,26 +27,39 @@ export default function CategoryPreview() {
     }
   }, [id]);
 
-  const category = useMemo(() => {
-    if (previewCategory) {
-      return previewCategory;
+  useEffect(() => {
+    if (previewCategory || decodedId === "" || decodedId === "new") {
+      return;
     }
 
-    if (decodedId === "" || decodedId === "new") {
-      return createEmptyCategory();
-    }
+    let isCurrent = true;
 
-    return (
-      loadCategories().find((item) => item.id === decodedId) ?? createEmptyCategory()
-    );
+    const loadCategory = async () => {
+      try {
+        const category = await fetchCategory(decodedId);
+        if (isCurrent) {
+          setLoadedCategory(category);
+        }
+      } catch {
+        if (isCurrent) {
+          setLoadedCategory(createEmptyCategory(decodedId));
+        }
+      }
+    };
+
+    void loadCategory();
+
+    return () => {
+      isCurrent = false;
+    };
   }, [decodedId, previewCategory]);
 
-  const visibleSections = category.sections.filter((section) => section.enabled === 1);
-  const previewSections =
-    visibleSections.length >= 3
-      ? visibleSections
-      : [...visibleSections, ...SAMPLE_SECTIONS].slice(0, 3);
-  const sectionGroups = chunkSections(previewSections, 3);
+  const category =
+    previewCategory ??
+    loadedCategory ??
+    createEmptyCategory(decodedId === "" || decodedId === "new" ? undefined : decodedId);
+
+  const heroImage = resolveS3ImageUrl(category.category_hero[0]?.image_url);
 
   return (
     <>
@@ -97,14 +72,35 @@ export default function CategoryPreview() {
           </Button>
         </div>
 
-        <section className="bg-white px-3 py-4 sm:px-6 sm:py-6">
-          <div className="mx-auto max-w-[1180px] space-y-7">
-            <h1 className="text-center text-[30px] font-semibold leading-tight text-[#1d4690] sm:text-[46px]">
-              {category.title || "Category Title"}
-            </h1>
+        <section className="bg-white px-3 py-4 text-[#1e1e1e] sm:px-6 sm:py-6">
+          <div className="mx-auto max-w-[1180px] space-y-8">
+            {heroImage && (
+              <div className="h-[260px] overflow-hidden rounded-xl bg-gray-100 sm:h-[380px]">
+                <img
+                  src={heroImage}
+                  alt={category.category_hero[0]?.image_text || category.category_title}
+                  className="h-full w-full object-cover"
+                  onError={(event) => {
+                    event.currentTarget.src = "/images/logo/ifx-logo.png";
+                  }}
+                />
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <p className="text-center text-sm font-semibold uppercase text-[#8a8253]">
+                {category.category_category}
+              </p>
+              <h1 className="text-center text-[30px] font-semibold leading-tight text-[#1d4690] sm:text-[46px]">
+                {category.category_title || "Category Title"}
+              </h1>
+            </div>
 
             <div className="space-y-2 text-[14px] leading-6 text-[#28313f] sm:text-[16px]">
-              {(category.mainText || "El texto principal de la categoria aparecera aqui.")
+              {(
+                category.category_description ||
+                "El texto principal de la categoria aparecera aqui."
+              )
                 .split(/\n+/)
                 .filter((line) => line.trim().length > 0)
                 .map((line, lineIndex) => (
@@ -112,60 +108,33 @@ export default function CategoryPreview() {
                 ))}
             </div>
 
-            <div className="space-y-10">
-              {sectionGroups.map((group, groupIndex) => (
-                <section
-                  key={`group-${groupIndex}`}
-                  className="grid gap-x-5 gap-y-8 sm:grid-cols-2 xl:grid-cols-3"
-                >
-                  {group.map((section) => (
-                    <article key={section.id} className="flex flex-col">
-                      <div className="h-[180px] overflow-hidden bg-[#d2d2d2] sm:h-[220px]">
-                        {section.image ? (
-                          <img
-                            src={section.image}
-                            alt={section.title || "Category section"}
-                            className="h-full w-full object-cover"
-                            onError={(event) => {
-                              event.currentTarget.src = "/images/logo/ifx-logo.png";
-                            }}
-                          />
-                        ) : (
-                          <div className="flex h-full items-center justify-center text-sm text-gray-500">
-                            Imagen de la seccion
-                          </div>
-                        )}
+            <div className="grid gap-8 md:grid-cols-2">
+              {category.category_section.map((section, index) => {
+                const sectionImage = resolveS3ImageUrl(section.section_image);
+
+                return (
+                  <article key={`section-${index}`} className="space-y-3">
+                    {sectionImage && (
+                      <div className="h-[220px] overflow-hidden bg-[#d2d2d2]">
+                        <img
+                          src={sectionImage}
+                          alt={section.section_title}
+                          className="h-full w-full object-cover"
+                          onError={(event) => {
+                            event.currentTarget.src = "/images/logo/ifx-logo.png";
+                          }}
+                        />
                       </div>
-                      <div className="mt-2">
-                        <h2 className="text-[24px] font-medium uppercase leading-tight text-[#1d3570] sm:text-[28px]">
-                          {section.title || "Titulo de la seccion"}
-                        </h2>
-                        <p className="mt-2 line-clamp-3 min-h-[72px] text-[13px] leading-6 text-[#394457] sm:text-[14px]">
-                          {section.text || "El texto de la seccion aparecera aqui."}
-                        </p>
-                        <div className="mt-4 flex items-center gap-3">
-                          <a
-                            href={section.learnMoreUrl || "#"}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex min-h-[38px] min-w-[120px] items-center justify-center px-4 text-[13px] font-medium uppercase tracking-[0.02em] text-[#8a8253] transition hover:text-[#6e673f]"
-                          >
-                            Learn More
-                          </a>
-                          <a
-                            href={section.applyOnlineUrl || "#"}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex min-h-[38px] min-w-[140px] items-center justify-center rounded-[4px] bg-[#2e3a84] px-4 text-[13px] font-semibold uppercase tracking-[0.02em] text-white transition hover:bg-[#23306f]"
-                          >
-                            Apply Online
-                          </a>
-                        </div>
-                      </div>
-                    </article>
-                  ))}
-                </section>
-              ))}
+                    )}
+                    <h2 className="text-[24px] font-medium uppercase leading-tight text-[#1d3570]">
+                      {section.section_title || "Titulo de la seccion"}
+                    </h2>
+                    <p className="whitespace-pre-line text-[14px] leading-6 text-[#394457]">
+                      {section.section_text || "El texto de la seccion aparecera aqui."}
+                    </p>
+                  </article>
+                );
+              })}
             </div>
           </div>
         </section>
