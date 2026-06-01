@@ -1,9 +1,10 @@
 import { URL_API_BASE } from "../../../config/api";
 import { generateGuid } from "../../../utils/guid";
 
-export interface CategoryHero {
-  image_text: string;
-  image_url: string;
+export interface CategoryCamp {
+  program_id: string;
+  program_order: number;
+  program_enabled: string | number | boolean;
 }
 
 export interface CategorySection {
@@ -13,77 +14,55 @@ export interface CategorySection {
   section_title: string;
 }
 
-export interface CategoryDetail {
-  detail_file: string;
-  detail_text: string;
-  detail_title: string;
+export interface CategoryVideo {
+  video_id: string;
+  video_order: number;
 }
 
-export interface CategoryAddon {
-  addons_cost: string;
-  addons_description: string;
-  addons_title: string;
-}
-
-export interface CategoryVariation {
-  variations_cost: string;
-  variations_dates: string;
-  variations_deadline: string;
-  variations_description: string;
-}
-
-export interface CategoryPlayer {
-  player_description: string;
-  player_image: string;
-  player_says: string;
-}
-
-export interface CategoryInformation {
-  information_title: string;
-  information_text: string;
+export interface CategoryImage {
+  image_id: string;
+  image_order: number;
 }
 
 export interface Category {
   category_id: string;
-  category_addons: CategoryAddon[];
-  category_apply: string;
-  category_category: string;
-  category_date: string;
-  category_description: string;
-  category_details: CategoryDetail[];
-  category_enabled: boolean | number | string;
-  category_hero: CategoryHero[];
-  category_information: CategoryInformation[];
-  category_players: CategoryPlayer[];
-  category_section: CategorySection[];
-  category_status: string;
+  category_head: string;
+  category_image: string;
   category_title: string;
-  category_variations: CategoryVariation[];
+  category_subtitle: string;
+  category_description: string;
+  category_text: string;
+  category_camps: CategoryCamp[];
+  category_section: CategorySection[];
+  category_videos: CategoryVideo[];
+  category_images: CategoryImage[];
+  category_apply: string;
+  category_date: string;
+  category_enabled: string | number | boolean;
 }
 
 interface ApiCategory {
-  category_id?: unknown;
-  category_addons?: unknown;
   category_apply?: unknown;
-  category_category?: unknown;
+  category_camps?: unknown;
   category_date?: unknown;
   category_description?: unknown;
-  category_details?: unknown;
   category_enabled?: unknown;
-  category_hero?: unknown;
-  category_information?: unknown;
-  category_players?: unknown;
+  category_head?: unknown;
+  category_image?: unknown;
+  category_id?: unknown;
+  category_images?: unknown;
   category_section?: unknown;
-  category_status?: unknown;
+  category_subtitle?: unknown;
+  category_text?: unknown;
   category_title?: unknown;
-  category_variations?: unknown;
+  category_videos?: unknown;
 }
 
 interface IndexedCategory extends Category {
   sourceIndex: number;
 }
 
-export const CATEGORIES_API_URL = `${URL_API_BASE.replace(/\/+$/, "")}/category/`;
+export const CATEGORY_API_URL = `${URL_API_BASE.replace(/\/+$/, "")}/category`;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -116,9 +95,7 @@ const assertSuccessfulApiPayload = (payload: unknown) => {
   }
 };
 
-const unwrapDynamoObject = (
-  value: Record<string, unknown>
-): Record<string, unknown> =>
+const unwrapDynamoObject = (value: Record<string, unknown>): Record<string, unknown> =>
   Object.fromEntries(
     Object.entries(value).map(([key, entry]) => [key, unwrapDynamoValue(entry)])
   );
@@ -155,6 +132,13 @@ const unwrapDynamoValue = (value: unknown): unknown => {
   return value;
 };
 
+const stringValue = (value: unknown): string => String(unwrapDynamoValue(value) ?? "");
+
+const numberValue = (value: unknown, fallback = 0): number => {
+  const numericValue = Number(unwrapDynamoValue(value));
+  return Number.isFinite(numericValue) ? numericValue : fallback;
+};
+
 const normalizeApiDate = (value: unknown): string => {
   const date = String(unwrapDynamoValue(value) ?? "");
   const dayMonthYear = date.match(/^(\d{2})-(\d{2})-(\d{4})$/);
@@ -166,9 +150,7 @@ const normalizeApiDate = (value: unknown): string => {
   return `${dayMonthYear[3]}-${dayMonthYear[2]}-${dayMonthYear[1]}`;
 };
 
-export const normalizeEnabled = (
-  value: Category["category_enabled"]
-): 0 | 1 => {
+export const normalizeEnabled = (value: Category["category_enabled"]): 0 | 1 => {
   const enabled = unwrapDynamoValue(value);
 
   if (
@@ -183,10 +165,7 @@ export const normalizeEnabled = (
   return 0;
 };
 
-const stringValue = (value: unknown): string =>
-  String(unwrapDynamoValue(value) ?? "");
-
-const normalizeArray = <T,>(
+const normalizeArray = <T>(
   value: unknown,
   mapper: (item: Record<string, unknown>) => T
 ): T[] => {
@@ -257,32 +236,32 @@ const extractApiCategories = (payload: unknown): ApiCategory[] => {
 };
 
 const toApiCategoryBody = (category: Category): ApiCategory => ({
-  category_id: category.category_id,
-  category_addons: category.category_addons,
   category_apply: category.category_apply,
-  category_category: category.category_category,
+  category_camps: category.category_camps.map((item) => ({
+    program_enabled: normalizeEnabled(item.program_enabled) === 1,
+    program_id: item.program_id,
+    program_order: item.program_order,
+  })),
   category_date: category.category_date,
   category_description: category.category_description,
-  category_details: category.category_details,
   category_enabled: normalizeEnabled(category.category_enabled) === 1,
-  category_hero: category.category_hero,
-  category_information: category.category_information,
-  category_players: category.category_players,
+  category_head: category.category_head,
+  category_image: category.category_image,
+  category_id: category.category_id,
+  category_images: category.category_images,
   category_section: category.category_section,
-  category_status: category.category_status,
+  category_subtitle: category.category_subtitle,
+  category_text: category.category_text,
   category_title: category.category_title,
-  category_variations: category.category_variations,
+  category_videos: category.category_videos,
 });
 
-const toCategoryMutationEvent = (
-  httpMethod: "POST" | "PUT" | "DELETE",
-  category: Category
-) => ({
+const toCategoryMutationEvent = (httpMethod: "POST" | "PUT", category: Category) => ({
+  body: JSON.stringify(toApiCategoryBody(category)),
   httpMethod,
   pathParameters: {
     category_id: category.category_id,
   },
-  body: JSON.stringify(toApiCategoryBody(category)),
 });
 
 const isCorsLikeFailure = (error: unknown): boolean =>
@@ -294,7 +273,7 @@ const postCategoryMutationEvent = async (
   const requestBody = JSON.stringify(mutationEvent);
 
   try {
-    const response = await fetch(CATEGORIES_API_URL, {
+    const response = await fetch(CATEGORY_API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -308,13 +287,14 @@ const postCategoryMutationEvent = async (
 
     const payload = await readJsonResponse(response);
     assertSuccessfulApiPayload(payload);
+
     return payload;
   } catch (error) {
     if (!isCorsLikeFailure(error)) {
       throw error;
     }
 
-    await fetch(CATEGORIES_API_URL, {
+    await fetch(CATEGORY_API_URL, {
       method: "POST",
       mode: "no-cors",
       headers: {
@@ -330,36 +310,27 @@ const postCategoryMutationEvent = async (
 export const parseCategoriesResponse = (payload: unknown): Category[] => {
   const indexedCategories: IndexedCategory[] = extractApiCategories(payload).map(
     (category, sourceIndex) => ({
-      category_id: stringValue(category.category_id || `category-${sourceIndex}`),
-      category_addons: normalizeArray(category.category_addons, (item) => ({
-        addons_cost: stringValue(item.addons_cost),
-        addons_description: stringValue(item.addons_description),
-        addons_title: stringValue(item.addons_title),
-      })),
       category_apply: stringValue(category.category_apply),
-      category_category: stringValue(category.category_category),
+      category_camps: normalizeArray(category.category_camps, (item) => ({
+        program_enabled: unwrapDynamoValue(item.program_enabled) as
+          | string
+          | number
+          | boolean,
+        program_id: stringValue(item.program_id),
+        program_order: numberValue(item.program_order, sourceIndex + 1),
+      })),
       category_date: normalizeApiDate(category.category_date),
       category_description: stringValue(category.category_description),
-      category_details: normalizeArray(category.category_details, (item) => ({
-        detail_file: stringValue(item.detail_file),
-        detail_text: stringValue(item.detail_text),
-        detail_title: stringValue(item.detail_title),
-      })),
-      category_enabled: unwrapDynamoValue(
-        category.category_enabled
-      ) as Category["category_enabled"],
-      category_hero: normalizeArray(category.category_hero, (item) => ({
-        image_text: stringValue(item.image_text),
-        image_url: stringValue(item.image_url),
-      })),
-      category_information: normalizeArray(category.category_information, (item) => ({
-        information_title: stringValue(item.information_title),
-        information_text: stringValue(item.information_text),
-      })),
-      category_players: normalizeArray(category.category_players, (item) => ({
-        player_description: stringValue(item.player_description),
-        player_image: stringValue(item.player_image),
-        player_says: stringValue(item.player_says),
+      category_enabled: unwrapDynamoValue(category.category_enabled) as
+        | string
+        | number
+        | boolean,
+      category_head: stringValue(category.category_head),
+      category_image: stringValue(category.category_image),
+      category_id: stringValue(category.category_id || `category-${sourceIndex}`),
+      category_images: normalizeArray(category.category_images, (item) => ({
+        image_id: stringValue(item.image_id),
+        image_order: numberValue(item.image_order, sourceIndex + 1),
       })),
       category_section: normalizeArray(category.category_section, (item) => ({
         section_image: stringValue(item.section_image),
@@ -367,13 +338,12 @@ export const parseCategoriesResponse = (payload: unknown): Category[] => {
         section_text: stringValue(item.section_text),
         section_title: stringValue(item.section_title),
       })),
-      category_status: stringValue(category.category_status),
+      category_subtitle: stringValue(category.category_subtitle),
+      category_text: stringValue(category.category_text),
       category_title: stringValue(category.category_title),
-      category_variations: normalizeArray(category.category_variations, (item) => ({
-        variations_cost: stringValue(item.variations_cost),
-        variations_dates: stringValue(item.variations_dates),
-        variations_deadline: stringValue(item.variations_deadline),
-        variations_description: stringValue(item.variations_description),
+      category_videos: normalizeArray(category.category_videos, (item) => ({
+        video_id: stringValue(item.video_id),
+        video_order: numberValue(item.video_order, sourceIndex + 1),
       })),
       sourceIndex,
     })
@@ -403,7 +373,7 @@ const isFallbackCategory = (category: Category, fallback: Category): boolean =>
   JSON.stringify(category) === JSON.stringify(fallback);
 
 export const fetchCategories = async (): Promise<Category[]> => {
-  const response = await fetch(CATEGORIES_API_URL);
+  const response = await fetch(CATEGORY_API_URL);
 
   if (!response.ok) {
     throw new Error(`Error ${response.status}`);
@@ -419,7 +389,7 @@ export const fetchCategory = async (id: string): Promise<Category> => {
   const fallback = createEmptyCategory(id);
 
   try {
-    const response = await fetch(CATEGORIES_API_URL, {
+    const response = await fetch(CATEGORY_API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -452,9 +422,7 @@ export const fetchCategory = async (id: string): Promise<Category> => {
 };
 
 export const updateCategory = async (category: Category): Promise<Category> => {
-  const payload = await postCategoryMutationEvent(
-    toCategoryMutationEvent("PUT", category)
-  );
+  const payload = await postCategoryMutationEvent(toCategoryMutationEvent("PUT", category));
   return payload ? parseCategoryResponse(payload, category) : category;
 };
 
@@ -470,15 +438,10 @@ export const createCategory = async (category: Category): Promise<Category> => {
   return payload ? parseCategoryResponse(payload, categoryToCreate) : categoryToCreate;
 };
 
-export const deleteCategory = async (id: string): Promise<void> => {
-  await postCategoryMutationEvent(
-    toCategoryMutationEvent("DELETE", createEmptyCategory(id))
-  );
-};
-
-export const createEmptyCategoryHero = (): CategoryHero => ({
-  image_text: "",
-  image_url: "",
+export const createEmptyCategoryCamp = (order: number): CategoryCamp => ({
+  program_enabled: true,
+  program_id: "",
+  program_order: order,
 });
 
 export const createEmptyCategorySection = (index: number): CategorySection => ({
@@ -488,50 +451,29 @@ export const createEmptyCategorySection = (index: number): CategorySection => ({
   section_title: "",
 });
 
-export const createEmptyCategoryDetail = (): CategoryDetail => ({
-  detail_file: "",
-  detail_text: "",
-  detail_title: "",
+export const createEmptyCategoryVideo = (order: number): CategoryVideo => ({
+  video_id: "",
+  video_order: order,
 });
 
-export const createEmptyCategoryAddon = (): CategoryAddon => ({
-  addons_cost: "",
-  addons_description: "",
-  addons_title: "",
-});
-
-export const createEmptyCategoryVariation = (): CategoryVariation => ({
-  variations_cost: "",
-  variations_dates: "",
-  variations_deadline: "",
-  variations_description: "",
-});
-
-export const createEmptyCategoryPlayer = (): CategoryPlayer => ({
-  player_description: "",
-  player_image: "",
-  player_says: "",
-});
-
-export const createEmptyCategoryInformation = (): CategoryInformation => ({
-  information_title: "",
-  information_text: "",
+export const createEmptyCategoryImage = (order: number): CategoryImage => ({
+  image_id: "",
+  image_order: order,
 });
 
 export const createEmptyCategory = (id = generateGuid()): Category => ({
-  category_id: id,
-  category_addons: [createEmptyCategoryAddon()],
   category_apply: "",
-  category_category: "",
+  category_camps: [],
   category_date: "",
   category_description: "",
-  category_details: [createEmptyCategoryDetail()],
   category_enabled: true,
-  category_hero: [createEmptyCategoryHero()],
-  category_information: [],
-  category_players: [createEmptyCategoryPlayer()],
+  category_head: "",
+  category_image: "",
+  category_id: id,
+  category_images: [],
   category_section: [createEmptyCategorySection(0)],
-  category_status: "published",
+  category_subtitle: "",
+  category_text: "",
   category_title: "",
-  category_variations: [createEmptyCategoryVariation()],
+  category_videos: [],
 });

@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import ComponentCard from "../../../components/common/ComponentCard";
-import PageBreadcrumb from "../../../components/common/PageBreadCrumb";
-import PageMeta from "../../../components/common/PageMeta";
 import Badge from "../../../components/ui/badge/Badge";
+import PageBreadcrumb from "../../../components/common/PageBreadCrumb";
+import ComponentCard from "../../../components/common/ComponentCard";
+import PageMeta from "../../../components/common/PageMeta";
 import Button from "../../../components/ui/button/Button";
 import {
   Table,
@@ -13,11 +13,7 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import { resolveS3ImageUrl } from "../../../utils/s3Image";
-import {
-  deleteCategory,
-  fetchCategories,
-  normalizeEnabled,
-} from "./categoryData";
+import { fetchCategories, normalizeEnabled } from "./categoryData";
 import type { Category } from "./categoryData";
 
 export default function CategoriesList() {
@@ -25,7 +21,6 @@ export default function CategoriesList() {
   const [data, setData] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const refreshData = async () => {
     setLoading(true);
@@ -54,25 +49,6 @@ export default function CategoriesList() {
     navigate("/categories/new");
   };
 
-  const onDelete = async (id: string) => {
-    const confirmed = window.confirm("Deseas borrar esta categoria?");
-    if (!confirmed) {
-      return;
-    }
-
-    setDeletingId(id);
-    setError(null);
-
-    try {
-      await deleteCategory(id);
-      await refreshData();
-    } catch {
-      setError("No se pudo borrar la categoria del API.");
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
   return (
     <>
       <PageMeta title="Category List" description="Category List" />
@@ -91,16 +67,13 @@ export default function CategoriesList() {
                       Image
                     </TableCell>
                     <TableCell isHeader className="px-5 py-3 text-start">
+                      Head
+                    </TableCell>
+                    <TableCell isHeader className="px-5 py-3 text-start">
                       Title
                     </TableCell>
                     <TableCell isHeader className="px-5 py-3 text-start">
-                      Category
-                    </TableCell>
-                    <TableCell isHeader className="px-5 py-3 text-start">
                       Date
-                    </TableCell>
-                    <TableCell isHeader className="px-5 py-3 text-start">
-                      Status
                     </TableCell>
                     <TableCell isHeader className="px-5 py-3 text-start">
                       Enabled
@@ -114,7 +87,7 @@ export default function CategoriesList() {
                   {loading && (
                     <TableRow>
                       <td
-                        colSpan={7}
+                        colSpan={6}
                         className="px-5 py-6 text-center text-sm text-gray-500 dark:text-gray-400"
                       >
                         Cargando categorias...
@@ -125,7 +98,7 @@ export default function CategoriesList() {
                   {!loading && error && (
                     <TableRow>
                       <td
-                        colSpan={7}
+                        colSpan={6}
                         className="px-5 py-6 text-center text-sm text-error-600 dark:text-error-400"
                       >
                         {error}
@@ -136,7 +109,7 @@ export default function CategoriesList() {
                   {!loading && !error && data.length === 0 && (
                     <TableRow>
                       <td
-                        colSpan={7}
+                        colSpan={6}
                         className="px-5 py-6 text-center text-sm text-gray-500 dark:text-gray-400"
                       >
                         No hay categorias para mostrar.
@@ -147,11 +120,7 @@ export default function CategoriesList() {
                   {!loading &&
                     !error &&
                     data.map((item) => {
-                      const mainImage = resolveS3ImageUrl(
-                        item.category_hero[0]?.image_url ||
-                          item.category_section[0]?.section_image ||
-                          item.category_players[0]?.player_image
-                      );
+                      const mainImage = resolveS3ImageUrl(item.category_image);
                       const enabled = normalizeEnabled(item.category_enabled) === 1;
 
                       return (
@@ -164,8 +133,7 @@ export default function CategoriesList() {
                                   alt={item.category_title}
                                   className="h-full w-full object-cover"
                                   onError={(event) => {
-                                    event.currentTarget.src =
-                                      "/images/logo/ifx-logo.png";
+                                    event.currentTarget.src = "/images/logo/ifx-logo.png";
                                   }}
                                 />
                               </div>
@@ -175,28 +143,12 @@ export default function CategoriesList() {
                               </div>
                             )}
                           </TableCell>
-                          <TableCell className="px-5 py-4">
-                            {item.category_title}
-                          </TableCell>
-                          <TableCell className="px-4 py-3">
-                            {item.category_category}
-                          </TableCell>
+                          <TableCell className="px-5 py-4">{item.category_head}</TableCell>
+                          <TableCell className="px-4 py-3">{item.category_title}</TableCell>
                           <TableCell className="px-4 py-3">
                             <span className="text-sm text-gray-600 dark:text-gray-300">
                               {item.category_date}
                             </span>
-                          </TableCell>
-                          <TableCell className="px-4 py-3">
-                            <Badge
-                              size="sm"
-                              color={
-                                item.category_status === "published"
-                                  ? "success"
-                                  : "warning"
-                              }
-                            >
-                              {item.category_status || "draft"}
-                            </Badge>
                           </TableCell>
                           <TableCell className="px-4 py-3">
                             <Badge size="sm" color={enabled ? "success" : "error"}>
@@ -211,15 +163,6 @@ export default function CategoriesList() {
                                 onClick={() => onEdit(item.category_id)}
                               >
                                 Edit
-                              </Button>
-                              <Button
-                                size="sm"
-                                onClick={() => onDelete(item.category_id)}
-                                disabled={deletingId === item.category_id}
-                              >
-                                {deletingId === item.category_id
-                                  ? "Deleting..."
-                                  : "Delete"}
                               </Button>
                             </div>
                           </TableCell>
