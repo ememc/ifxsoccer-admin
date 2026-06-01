@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import ComponentCard from "../../../components/common/ComponentCard";
 import PageBreadcrumb from "../../../components/common/PageBreadCrumb";
 import PageMeta from "../../../components/common/PageMeta";
+import DatePicker from "../../../components/form/date-picker";
 import Label from "../../../components/form/Label";
 import Input from "../../../components/form/input/InputField";
 import Button from "../../../components/ui/button/Button";
@@ -280,11 +281,10 @@ export default function Video() {
 
               <div>
                 <Label htmlFor="video-published-at">Fecha de Publicacion</Label>
-                <Input
+                <DatePicker
                   id="video-published-at"
-                  type="date"
                   value={safeVideo.publishedAt}
-                  onChange={(e) => updateVideo({ publishedAt: e.target.value })}
+                  onDateChange={(publishedAt) => updateVideo({ publishedAt })}
                 />
               </div>
             </div>

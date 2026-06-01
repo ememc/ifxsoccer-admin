@@ -1,10 +1,11 @@
 import { URL_API_BASE } from "../../../config/api";
+import { getTodayDateInputValue } from "../../../utils/date";
 import { generateGuid } from "../../../utils/guid";
 
-export interface CategoryCamp {
+export interface CategoryProgram {
   program_id: string;
-  program_order: number;
-  program_enabled: string | number | boolean;
+  program_order: string;
+  program_status: string | number | boolean;
 }
 
 export interface CategorySection {
@@ -32,18 +33,21 @@ export interface Category {
   category_subtitle: string;
   category_description: string;
   category_text: string;
-  category_camps: CategoryCamp[];
-  category_section: CategorySection[];
+  category_programs: CategoryProgram[];
+  category_section: string | number | boolean;
+  category_sections: CategorySection[];
   category_videos: CategoryVideo[];
   category_images: CategoryImage[];
   category_apply: string;
   category_date: string;
   category_enabled: string | number | boolean;
+  category_status: string | number | boolean;
 }
 
 interface ApiCategory {
   category_apply?: unknown;
   category_camps?: unknown;
+  category_programs?: unknown;
   category_date?: unknown;
   category_description?: unknown;
   category_enabled?: unknown;
@@ -52,6 +56,8 @@ interface ApiCategory {
   category_id?: unknown;
   category_images?: unknown;
   category_section?: unknown;
+  category_sections?: unknown;
+  category_status?: unknown;
   category_subtitle?: unknown;
   category_text?: unknown;
   category_title?: unknown;
@@ -134,6 +140,9 @@ const unwrapDynamoValue = (value: unknown): unknown => {
 
 const stringValue = (value: unknown): string => String(unwrapDynamoValue(value) ?? "");
 
+const firstDefinedValue = (...values: unknown[]): unknown =>
+  values.find((value) => unwrapDynamoValue(value) !== undefined);
+
 const numberValue = (value: unknown, fallback = 0): number => {
   const numericValue = Number(unwrapDynamoValue(value));
   return Number.isFinite(numericValue) ? numericValue : fallback;
@@ -157,7 +166,9 @@ export const normalizeEnabled = (value: Category["category_enabled"]): 0 | 1 => 
     enabled === 1 ||
     enabled === true ||
     enabled === "1" ||
-    String(enabled).toLowerCase() === "true"
+    String(enabled).toLowerCase() === "true" ||
+    String(enabled).toLowerCase() === "active" ||
+    String(enabled).toLowerCase() === "enabled"
   ) {
     return 1;
   }
@@ -237,10 +248,10 @@ const extractApiCategories = (payload: unknown): ApiCategory[] => {
 
 const toApiCategoryBody = (category: Category): ApiCategory => ({
   category_apply: category.category_apply,
-  category_camps: category.category_camps.map((item) => ({
-    program_enabled: normalizeEnabled(item.program_enabled) === 1,
+  category_programs: category.category_programs.map((item) => ({
     program_id: item.program_id,
     program_order: item.program_order,
+    program_status: normalizeEnabled(item.program_status) === 1,
   })),
   category_date: category.category_date,
   category_description: category.category_description,
@@ -249,7 +260,9 @@ const toApiCategoryBody = (category: Category): ApiCategory => ({
   category_image: category.category_image,
   category_id: category.category_id,
   category_images: category.category_images,
-  category_section: category.category_section,
+  category_section: normalizeEnabled(category.category_section) === 1,
+  category_sections: category.category_sections,
+  category_status: normalizeEnabled(category.category_status) === 1,
   category_subtitle: category.category_subtitle,
   category_text: category.category_text,
   category_title: category.category_title,
@@ -311,14 +324,16 @@ export const parseCategoriesResponse = (payload: unknown): Category[] => {
   const indexedCategories: IndexedCategory[] = extractApiCategories(payload).map(
     (category, sourceIndex) => ({
       category_apply: stringValue(category.category_apply),
-      category_camps: normalizeArray(category.category_camps, (item) => ({
-        program_enabled: unwrapDynamoValue(item.program_enabled) as
-          | string
-          | number
-          | boolean,
+      category_programs: normalizeArray(
+        firstDefinedValue(category.category_programs, category.category_camps),
+        (item) => ({
         program_id: stringValue(item.program_id),
-        program_order: numberValue(item.program_order, sourceIndex + 1),
-      })),
+        program_order: stringValue(item.program_order || String(sourceIndex + 1)),
+        program_status: (unwrapDynamoValue(
+          firstDefinedValue(item.program_status, item.program_enabled, true)
+        ) ?? true) as string | number | boolean,
+      })
+      ),
       category_date: normalizeApiDate(category.category_date),
       category_description: stringValue(category.category_description),
       category_enabled: unwrapDynamoValue(category.category_enabled) as
@@ -332,12 +347,24 @@ export const parseCategoriesResponse = (payload: unknown): Category[] => {
         image_id: stringValue(item.image_id),
         image_order: numberValue(item.image_order, sourceIndex + 1),
       })),
-      category_section: normalizeArray(category.category_section, (item) => ({
+      category_section: (Array.isArray(unwrapDynamoValue(category.category_section))
+        ? true
+        : unwrapDynamoValue(firstDefinedValue(category.category_section, true)) ?? true) as
+        | string
+        | number
+        | boolean,
+      category_sections: normalizeArray(
+        firstDefinedValue(category.category_sections, category.category_section),
+        (item) => ({
         section_image: stringValue(item.section_image),
         section_order: stringValue(item.section_order),
         section_text: stringValue(item.section_text),
         section_title: stringValue(item.section_title),
-      })),
+      })
+      ),
+      category_status: (unwrapDynamoValue(
+        firstDefinedValue(category.category_status, true)
+      ) ?? true) as string | number | boolean,
       category_subtitle: stringValue(category.category_subtitle),
       category_text: stringValue(category.category_text),
       category_title: stringValue(category.category_title),
@@ -438,10 +465,10 @@ export const createCategory = async (category: Category): Promise<Category> => {
   return payload ? parseCategoryResponse(payload, categoryToCreate) : categoryToCreate;
 };
 
-export const createEmptyCategoryCamp = (order: number): CategoryCamp => ({
-  program_enabled: true,
+export const createEmptyCategoryProgram = (order: number): CategoryProgram => ({
   program_id: "",
-  program_order: order,
+  program_order: String(order),
+  program_status: true,
 });
 
 export const createEmptyCategorySection = (index: number): CategorySection => ({
@@ -463,15 +490,17 @@ export const createEmptyCategoryImage = (order: number): CategoryImage => ({
 
 export const createEmptyCategory = (id = generateGuid()): Category => ({
   category_apply: "",
-  category_camps: [],
-  category_date: "",
+  category_programs: [],
+  category_date: getTodayDateInputValue(),
   category_description: "",
   category_enabled: true,
   category_head: "",
   category_image: "",
   category_id: id,
   category_images: [],
-  category_section: [createEmptyCategorySection(0)],
+  category_section: true,
+  category_sections: [createEmptyCategorySection(0)],
+  category_status: true,
   category_subtitle: "",
   category_text: "",
   category_title: "",

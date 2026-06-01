@@ -1,4 +1,5 @@
 import { URL_API_BASE } from "../../../config/api";
+import { getTodayDateInputValue } from "../../../utils/date";
 import { generateGuid } from "../../../utils/guid";
 
 export interface News {
@@ -377,7 +378,7 @@ export const createEmptyNews = (id = generateGuid()): News => ({
   description: "",
   image: "",
   principal: 0,
-  date: "",
+  date: getTodayDateInputValue(),
   state: "",
   enabled: 1,
   category: "",

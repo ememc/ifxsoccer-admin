@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import ComponentCard from "../../../components/common/ComponentCard";
 import PageBreadcrumb from "../../../components/common/PageBreadCrumb";
 import PageMeta from "../../../components/common/PageMeta";
+import DatePicker from "../../../components/form/date-picker";
 import Label from "../../../components/form/Label";
 import Input from "../../../components/form/input/InputField";
 import TextArea from "../../../components/form/input/TextArea";
@@ -523,12 +524,11 @@ export default function Destination() {
               <div className="grid gap-6 lg:grid-cols-2">
                 <div>
                   <Label htmlFor="destination-date">Date</Label>
-                  <Input
+                  <DatePicker
                     id="destination-date"
-                    type="date"
                     value={safeDestination.destination_date}
-                    onChange={(event) =>
-                      updateDestination({ destination_date: event.target.value })
+                    onDateChange={(destination_date) =>
+                      updateDestination({ destination_date })
                     }
                   />
                 </div>

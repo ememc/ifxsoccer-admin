@@ -1,4 +1,5 @@
 import { URL_API_BASE } from "../../../config/api";
+import { getTodayDateInputValue } from "../../../utils/date";
 import { generateGuid } from "../../../utils/guid";
 
 export interface DestinationHero {
@@ -469,7 +470,7 @@ export const createEmptyDestinationAcademy = (
 export const createEmptyDestination = (id = generateGuid()): Destination => ({
   destination_id: id,
   destination_category: "",
-  destination_date: "",
+  destination_date: getTodayDateInputValue(),
   destination_title: "",
   destination_description: "",
   destination_hero: [createEmptyDestinationHero()],

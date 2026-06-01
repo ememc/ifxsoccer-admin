@@ -1,4 +1,5 @@
 import { URL_API_BASE } from "../../../config/api";
+import { getTodayDateInputValue } from "../../../utils/date";
 import { generateGuid } from "../../../utils/guid";
 
 export interface ProgramHero {
@@ -505,7 +506,7 @@ export const createEmptyProgram = (id = generateGuid()): Program => ({
   program_apply: "",
   program_enabled: true,
   program_status: "",
-  program_date: "",
+  program_date: getTodayDateInputValue(),
 });
 
 export type { ProgramArrayKey };

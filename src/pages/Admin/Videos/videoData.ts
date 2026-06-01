@@ -1,4 +1,5 @@
 import { URL_API_BASE } from "../../../config/api";
+import { getTodayDateInputValue } from "../../../utils/date";
 import { generateGuid } from "../../../utils/guid";
 
 export interface VideoItem {
@@ -479,7 +480,7 @@ export const createEmptyVideo = (id = generateGuid()): VideoItem => ({
   id,
   title: "",
   videoUrl: "",
-  publishedAt: "",
+  publishedAt: getTodayDateInputValue(),
   enabled: 1,
   alt: "",
 });

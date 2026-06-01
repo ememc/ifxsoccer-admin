@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import ComponentCard from "../../../components/common/ComponentCard";
 import PageBreadcrumb from "../../../components/common/PageBreadCrumb";
 import PageMeta from "../../../components/common/PageMeta";
+import DatePicker from "../../../components/form/date-picker";
 import Label from "../../../components/form/Label";
 import Input from "../../../components/form/input/InputField";
 import S3ImageManager from "../../../components/page/S3ImageManager";
@@ -471,11 +472,10 @@ export default function News() {
               <div className="grid gap-6 lg:grid-cols-2">
                 <div>
                   <Label htmlFor="news-date">Date</Label>
-                  <Input
+                  <DatePicker
                     id="news-date"
-                    type="date"
                     value={safeNews.date}
-                    onChange={(e) => updateNews({ date: e.target.value })}
+                    onDateChange={(date) => updateNews({ date })}
                   />
                 </div>
                 <div>

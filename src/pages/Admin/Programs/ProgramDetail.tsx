@@ -1,3 +1,4 @@
+import DatePicker from "../../../components/form/date-picker";
 import Label from "../../../components/form/Label";
 import Input from "../../../components/form/input/InputField";
 import TextArea from "../../../components/form/input/TextArea";
@@ -127,11 +128,10 @@ export default function ProgramDetail({ program, onChange }: ProgramDetailProps)
           </div>
           <div>
             <Label htmlFor="program-date">Fecha de Publicacion</Label>
-            <Input
+            <DatePicker
               id="program-date"
-              type="date"
               value={program.program_date}
-              onChange={(event) => onChange({ program_date: event.target.value })}
+              onDateChange={(program_date) => onChange({ program_date })}
             />
           </div>
         </div>

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import ComponentCard from "../../../components/common/ComponentCard";
 import PageBreadcrumb from "../../../components/common/PageBreadCrumb";
 import PageMeta from "../../../components/common/PageMeta";
+import DatePicker from "../../../components/form/date-picker";
 import Label from "../../../components/form/Label";
 import Input from "../../../components/form/input/InputField";
 import TextArea from "../../../components/form/input/TextArea";
@@ -21,7 +22,7 @@ import type { VideoItem } from "../Videos/videoData";
 import {
   createCategory as createCategoryRequest,
   createEmptyCategory,
-  createEmptyCategoryCamp,
+  createEmptyCategoryProgram,
   createEmptyCategoryImage,
   createEmptyCategorySection,
   createEmptyCategoryVideo,
@@ -31,7 +32,7 @@ import {
 } from "./categoryData";
 import type {
   Category as CategoryData,
-  CategoryCamp,
+  CategoryProgram,
   CategoryImage,
   CategorySection,
   CategoryVideo,
@@ -274,9 +275,9 @@ export default function Category() {
     setSaveError(null);
   };
 
-  const updateCamp = (index: number, patch: Partial<CategoryCamp>) => {
+  const updateProgram = (index: number, patch: Partial<CategoryProgram>) => {
     updateCategory({
-      category_camps: safeCategory.category_camps.map((item, itemIndex) =>
+      category_programs: safeCategory.category_programs.map((item, itemIndex) =>
         itemIndex === index ? { ...item, ...patch } : item
       ),
     });
@@ -284,7 +285,7 @@ export default function Category() {
 
   const updateSection = (index: number, patch: Partial<CategorySection>) => {
     updateCategory({
-      category_section: safeCategory.category_section.map((item, itemIndex) =>
+      category_sections: safeCategory.category_sections.map((item, itemIndex) =>
         itemIndex === index ? { ...item, ...patch } : item
       ),
     });
@@ -318,15 +319,15 @@ export default function Category() {
     if (pickerTarget === "programs") {
       if (pickerReplaceIndex === null) {
         updateCategory({
-          category_camps: [
-            ...safeCategory.category_camps,
-            createEmptyCategoryCamp(safeCategory.category_camps.length + 1),
+          category_programs: [
+            ...safeCategory.category_programs,
+            createEmptyCategoryProgram(safeCategory.category_programs.length + 1),
           ].map((item, index, items) =>
             index === items.length - 1 ? { ...item, program_id: selectedId } : item
           ),
         });
       } else {
-        updateCamp(pickerReplaceIndex, { program_id: selectedId });
+        updateProgram(pickerReplaceIndex, { program_id: selectedId });
       }
     }
 
@@ -436,11 +437,11 @@ export default function Category() {
         <Button onClick={() => openPicker("programs")}>Buscar Programa</Button>
       </div>
 
-      {safeCategory.category_camps.length === 0 && (
+      {safeCategory.category_programs.length === 0 && (
         <EmptyTabState text="Aun no hay programas relacionados." />
       )}
 
-      {safeCategory.category_camps.map((item, index) => {
+      {safeCategory.category_programs.map((item, index) => {
         const linkedProgram = programMap.get(item.program_id);
 
         return (
@@ -458,7 +459,7 @@ export default function Category() {
                   size="sm"
                   onClick={() =>
                     updateCategory({
-                      category_camps: removeAt(safeCategory.category_camps, index),
+                      category_programs: removeAt(safeCategory.category_programs, index),
                     })
                   }
                 >
@@ -473,7 +474,7 @@ export default function Category() {
                 <Input
                   id={`category-camp-id-${index}`}
                   value={item.program_id}
-                  onChange={(event) => updateCamp(index, { program_id: event.target.value })}
+                  onChange={(event) => updateProgram(index, { program_id: event.target.value })}
                   placeholder="Program id"
                 />
               </div>
@@ -484,8 +485,8 @@ export default function Category() {
                   type="number"
                   value={item.program_order}
                   onChange={(event) =>
-                    updateCamp(index, {
-                      program_order: Number(event.target.value) || 0,
+                    updateProgram(index, {
+                      program_order: event.target.value,
                     })
                   }
                 />
@@ -494,16 +495,16 @@ export default function Category() {
                 <Label>Status</Label>
                 <div className="flex gap-2">
                   <Button
-                    variant={normalizeEnabled(item.program_enabled) === 1 ? "primary" : "outline"}
+                    variant={normalizeEnabled(item.program_status) === 1 ? "primary" : "outline"}
                     size="sm"
-                    onClick={() => updateCamp(index, { program_enabled: true })}
+                    onClick={() => updateProgram(index, { program_status: true })}
                   >
                     Enabled
                   </Button>
                   <Button
-                    variant={normalizeEnabled(item.program_enabled) === 0 ? "primary" : "outline"}
+                    variant={normalizeEnabled(item.program_status) === 0 ? "primary" : "outline"}
                     size="sm"
-                    onClick={() => updateCamp(index, { program_enabled: false })}
+                    onClick={() => updateProgram(index, { program_status: false })}
                   >
                     Disabled
                   </Button>
@@ -531,9 +532,9 @@ export default function Category() {
         <Button
           onClick={() =>
             updateCategory({
-              category_section: [
-                ...safeCategory.category_section,
-                createEmptyCategorySection(safeCategory.category_section.length),
+              category_sections: [
+                ...safeCategory.category_sections,
+                createEmptyCategorySection(safeCategory.category_sections.length),
               ],
             })
           }
@@ -542,11 +543,11 @@ export default function Category() {
         </Button>
       </div>
 
-      {safeCategory.category_section.length === 0 && (
+      {safeCategory.category_sections.length === 0 && (
         <EmptyTabState text="Aun no hay sections." />
       )}
 
-      {safeCategory.category_section.map((item, index) => (
+      {safeCategory.category_sections.map((item, index) => (
         <div key={`section-${index}`} className={panelCardClass}>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">
@@ -557,7 +558,7 @@ export default function Category() {
               size="sm"
               onClick={() =>
                 updateCategory({
-                  category_section: removeAt(safeCategory.category_section, index),
+                  category_sections: removeAt(safeCategory.category_sections, index),
                 })
               }
             >
@@ -850,6 +851,32 @@ export default function Category() {
               </div>
             </div>
 
+            <div>
+              <Label>Category Section</Label>
+              <div className="flex gap-2">
+                <Button
+                  variant={
+                    normalizeEnabled(safeCategory.category_section) === 1
+                      ? "primary"
+                      : "outline"
+                  }
+                  onClick={() => updateCategory({ category_section: true })}
+                >
+                  Enabled
+                </Button>
+                <Button
+                  variant={
+                    normalizeEnabled(safeCategory.category_section) === 0
+                      ? "primary"
+                      : "outline"
+                  }
+                  onClick={() => updateCategory({ category_section: false })}
+                >
+                  Disabled
+                </Button>
+              </div>
+            </div>
+
             <div className="grid gap-6 lg:grid-cols-2">
               <div>
                 <Label htmlFor="category-title">Title</Label>
@@ -907,11 +934,10 @@ export default function Category() {
               </div>
               <div>
                 <Label htmlFor="category-date">Fecha de Publicacion</Label>
-                <Input
+                <DatePicker
                   id="category-date"
-                  type="date"
                   value={safeCategory.category_date}
-                  onChange={(event) => updateCategory({ category_date: event.target.value })}
+                  onDateChange={(category_date) => updateCategory({ category_date })}
                 />
               </div>
             </div>
@@ -1069,13 +1095,13 @@ export default function Category() {
                   ))}
               </section>
 
-              {safeCategory.category_section.length > 0 && (
+              {safeCategory.category_sections.length > 0 && (
                 <section className="space-y-4">
                   <h2 className="text-[26px] font-semibold leading-tight text-[#1d3570]">
                     Sections
                   </h2>
                   <div className="space-y-4">
-                    {safeCategory.category_section.map((section, index) => (
+                    {safeCategory.category_sections.map((section, index) => (
                       <div
                         key={`${section.section_title}-${index}`}
                         className="space-y-3 border-t border-[#d7d7d7] pt-4 first:border-t-0 first:pt-0"
@@ -1106,25 +1132,25 @@ export default function Category() {
                 </section>
               )}
 
-              {safeCategory.category_camps.length > 0 && (
+              {safeCategory.category_programs.length > 0 && (
                 <section className="space-y-4">
                   <h2 className="text-[26px] font-semibold leading-tight text-[#1d3570]">
                     Programs
                   </h2>
                   <div className="grid gap-4 md:grid-cols-2">
-                    {safeCategory.category_camps.map((camp, index) => {
-                      const linkedProgram = programMap.get(camp.program_id);
+                    {safeCategory.category_programs.map((program, index) => {
+                      const linkedProgram = programMap.get(program.program_id);
 
                       return (
                         <div
-                          key={`${camp.program_id}-${index}`}
+                          key={`${program.program_id}-${index}`}
                           className="rounded-lg border border-[#d7d7d7] bg-[#f8f8f8] p-5"
                         >
                           <h3 className="text-[20px] font-semibold text-[#1d3570]">
                             {linkedProgram?.program_title || `Program ${index + 1}`}
                           </h3>
                           <p className="mt-2 text-[16px] leading-7 text-[#4a4a4a]">
-                            {linkedProgram?.program_description || camp.program_id}
+                            {linkedProgram?.program_description || program.program_id}
                           </p>
                         </div>
                       );

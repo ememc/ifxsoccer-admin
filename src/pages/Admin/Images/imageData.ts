@@ -1,4 +1,5 @@
 import { URL_API_BASE } from "../../../config/api";
+import { getTodayDateInputValue } from "../../../utils/date";
 import { generateGuid } from "../../../utils/guid";
 
 export { generateGuid };
@@ -372,6 +373,6 @@ export const createEmptyImage = (): ImageItem => ({
   id: generateGuid(),
   title: "",
   imageUrl: "",
-  publishedAt: "",
+  publishedAt: getTodayDateInputValue(),
   enabled: 1,
 });

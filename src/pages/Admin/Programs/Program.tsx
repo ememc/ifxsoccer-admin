@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import ComponentCard from "../../../components/common/ComponentCard";
 import PageBreadcrumb from "../../../components/common/PageBreadCrumb";
 import PageMeta from "../../../components/common/PageMeta";
+import DatePicker from "../../../components/form/date-picker";
 import Label from "../../../components/form/Label";
 import Input from "../../../components/form/input/InputField";
 import TextArea from "../../../components/form/input/TextArea";
@@ -388,11 +389,10 @@ export default function Program() {
               </div>
               <div>
                 <Label htmlFor="program-date">Fecha de Publicacion</Label>
-                <Input
+                <DatePicker
                   id="program-date"
-                  type="date"
                   value={safeProgram.program_date}
-                  onChange={(event) => updateProgram({ program_date: event.target.value })}
+                  onDateChange={(program_date) => updateProgram({ program_date })}
                 />
               </div>
             </div>

@@ -98,7 +98,7 @@ export default function CategoryPreview() {
             </div>
 
             <div className="space-y-10">
-              {category.category_section.map((section, index) => {
+              {category.category_sections.map((section, index) => {
                 const previewUrl = resolveS3ImageUrl(section.section_image);
 
                 return (

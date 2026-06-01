@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import ComponentCard from "../../../components/common/ComponentCard";
 import PageBreadcrumb from "../../../components/common/PageBreadCrumb";
 import PageMeta from "../../../components/common/PageMeta";
+import DatePicker from "../../../components/form/date-picker";
 import Label from "../../../components/form/Label";
 import Input from "../../../components/form/input/InputField";
 import S3ImageManager from "../../../components/page/S3ImageManager";
@@ -272,11 +273,10 @@ export default function Hero() {
 
               <div>
                 <Label htmlFor="hero-date">Fecha de Publicacion</Label>
-                <Input
+                <DatePicker
                   id="hero-date"
-                  type="date"
                   value={safeHero.date}
-                  onChange={(e) => updateHero({ date: e.target.value })}
+                  onDateChange={(date) => updateHero({ date })}
                 />
               </div>
             </div>

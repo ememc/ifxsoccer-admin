@@ -1,4 +1,5 @@
 import { URL_API_BASE } from "../../../config/api";
+import { getTodayDateInputValue } from "../../../utils/date";
 import { generateGuid } from "../../../utils/guid";
 
 export interface HeroItem {
@@ -480,7 +481,7 @@ export const createEmptyHero = (id = generateGuid()): HeroItem => ({
   title: "",
   button: "",
   call: "",
-  date: "",
+  date: getTodayDateInputValue(),
   enabled: 1,
   image: "",
 });
