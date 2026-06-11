@@ -19,6 +19,8 @@ import ImagesList from "./pages/Admin/Images/ImagesList";
 import Image from "./pages/Admin/Images/Image";
 import DestinationsList from "./pages/Admin/Destinations/DestinationsList";
 import Destination from "./pages/Admin/Destinations/Destination";
+import MenuList from "./pages/Admin/Menu/MenuList";
+import Menu from "./pages/Admin/Menu/Menu";
 
 const isAuthenticated = () => {
   return !!localStorage.getItem("access_token");
@@ -59,6 +61,8 @@ export default function App() {
             <Route path="images/:id" element={<Image />} />
             <Route path="destinations-list" element={<DestinationsList />} />
             <Route path="destinations/:id" element={<Destination />} />
+            <Route path="menu-list" element={<MenuList />} />
+            <Route path="menu/:id" element={<Menu />} />
           </Route>
 
           {/* Default */}
